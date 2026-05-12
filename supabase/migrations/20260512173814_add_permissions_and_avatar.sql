@@ -88,7 +88,7 @@ BEGIN
 
   RETURN new_user_id;
 END;
-$;
+$$;
 
 -- Function to update user
 CREATE OR REPLACE FUNCTION public.update_user_account(
@@ -140,7 +140,7 @@ BEGIN
     );
   END LOOP;
 END;
-$;
+$$;
 
 -- Function to delete user completely
 CREATE OR REPLACE FUNCTION public.delete_user_account(p_user_id uuid)
@@ -151,4 +151,4 @@ AS $$
 BEGIN
   DELETE FROM auth.users WHERE id = p_user_id;
 END;
-$;
+$$;
