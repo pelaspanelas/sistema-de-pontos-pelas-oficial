@@ -1,0 +1,89 @@
+import { supabase } from '@/lib/supabase/client'
+
+export async function fetchPontoDiario(profileId: string, data: string) {
+  const { data: record, error } = await supabase
+    .from('pontos_diarios')
+    .select('*')
+    .eq('profile_id', profileId)
+    .eq('data', data)
+    .maybeSingle()
+  return { record, error }
+}
+
+export async function registrarPonto({
+  profileId,
+  data,
+  dataHora,
+  tipoPonto,
+  horario,
+  fotoFile,
+  latitude,
+  longitude,
+}: {
+  profileId: string
+  data: string
+  dataHora: string
+  tipoPonto: string
+  horario: string
+  fotoFile?: Blob
+  latitude: number
+  longitude: number
+}) {
+  let foto_url = null
+  if (fotoFile) {
+    const fileName = `${profileId}/${Date.now()}.jpg`
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('pontos_fotos')
+      .upload(fileName, fotoFile)
+    if (uploadData) {
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('pontos_fotos').getPublicUrl(fileName)
+      foto_url = publicUrl
+    } else if (uploadError) {
+      console.error('Failed to upload photo:', uploadError)
+    }
+  }
+
+  const { error: err1 } = await supabase.from('pontos').insert({
+    profile_id: profileId,
+    data,
+    data_hora: dataHora,
+    tipo_ponto: tipoPonto,
+    horario,
+    foto_url,
+    latitude,
+    longitude,
+  })
+
+  if (err1) throw err1
+
+  const { record } = await fetchPontoDiario(profileId, data)
+
+  const colMap: Record<string, string> = {
+    entrada: 'entrada',
+    almoço_saída: 'saida_almoco',
+    almoço_retorno: 'retorno_almoco',
+    saída: 'saida',
+  }
+  const colName = colMap[tipoPonto]
+
+  if (record) {
+    const { error: err2 } = await supabase
+      .from('pontos_diarios')
+      .update({
+        [colName]: horario,
+      })
+      .eq('id', record.id)
+    if (err2) throw err2
+  } else {
+    const { error: err3 } = await supabase.from('pontos_diarios').insert({
+      profile_id: profileId,
+      criado_por: profileId,
+      data,
+      [colName]: horario,
+      tipo_registro: 'automático',
+    })
+    if (err3) throw err3
+  }
+}

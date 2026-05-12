@@ -7,12 +7,15 @@ import { Label } from '@/components/ui/label'
 import { ChefHat } from 'lucide-react'
 
 export default function Login() {
-  const [email, setEmail] = useState('wagner@pelaspanelas.com.br')
-  const [password, setPassword] = useState('wag7132')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { signIn } = useAuth()
   const navigate = useNavigate()
+
+  const searchParams = new URLSearchParams(window.location.search)
+  const changed = searchParams.get('changed')
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,7 +26,11 @@ export default function Login() {
       setError(signInError.message)
       setLoading(false)
     } else {
-      navigate('/')
+      if (password === '123456') {
+        navigate('/change-password')
+      } else {
+        navigate('/ponto')
+      }
     }
   }
 
@@ -39,6 +46,11 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleLogin} className="p-8 space-y-6">
+          {changed && (
+            <div className="p-3 text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md animate-fade-in-down">
+              Senha alterada com sucesso! Faça login com a nova senha.
+            </div>
+          )}
           {error && (
             <div className="p-3 text-sm text-destructive-foreground bg-destructive/10 border border-destructive/20 rounded-md">
               {error}

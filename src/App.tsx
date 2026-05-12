@@ -5,8 +5,8 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 
 import { AuthProvider, useAuth } from './hooks/use-auth'
 import Layout from './components/Layout'
-import Index from './pages/Index'
 import Ponto from './pages/Ponto'
+import ChangePassword from './pages/ChangePassword'
 import EspelhoPonto from './pages/EspelhoPonto'
 import Colaboradores from './pages/Colaboradores'
 import Login from './pages/Login'
@@ -28,6 +28,7 @@ const App = () => (
         <Sonner />
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/change-password" element={<ChangePassword />} />
           <Route
             element={
               <ProtectedRoute>
@@ -35,7 +36,7 @@ const App = () => (
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={<Navigate to="/ponto" replace />} />
             <Route path="/ponto" element={<Ponto />} />
             <Route path="/espelho-ponto" element={<EspelhoPonto />} />
             <Route path="/colaboradores" element={<Colaboradores />} />
