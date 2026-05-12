@@ -1,4 +1,5 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '@/hooks/use-auth'
 import {
   LayoutDashboard,
   Clock,
@@ -66,6 +67,13 @@ const navItems = [
 
 export function AppSidebar() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { signOut } = useAuth()
+
+  const handleSignOut = async () => {
+    await signOut()
+    navigate('/login')
+  }
 
   return (
     <Sidebar>
@@ -125,11 +133,12 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem className="mt-2">
-            <SidebarMenuButton asChild className="text-muted-foreground hover:text-foreground">
-              <Link to="/login">
-                <LogOut className="h-4 w-4 mr-2" />
-                <span>Sair</span>
-              </Link>
+            <SidebarMenuButton
+              onClick={handleSignOut}
+              className="text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              <span>Sair</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

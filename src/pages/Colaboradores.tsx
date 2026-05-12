@@ -1,11 +1,12 @@
-import { useState } from 'react'
-import { Search, Plus, MoreHorizontal, Mail, Phone, MapPin } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Search, MoreHorizontal, Mail, Phone, MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { COLABORADORES_DATA } from '@/lib/mock-data'
+import { ColaboradorFormModal } from '@/components/colaboradores/ColaboradorFormModal'
+import { supabase } from '@/lib/supabase/client'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,19 +17,29 @@ import {
 export default function Colaboradores() {
   const [filter, setFilter] = useState<'Todos' | 'Ativo' | 'Inativo'>('Todos')
   const [search, setSearch] = useState('')
+  const [colaboradores, setColaboradores] = useState<any[]>([])
 
-  const filteredColaboradores = COLABORADORES_DATA.filter((c) => {
+  const fetchColaboradores = async () => {
+    const { data } = await supabase.from('profiles').select('*').order('name')
+    if (data) setColaboradores(data)
+  }
+
+  useEffect(() => {
+    fetchColaboradores()
+  }, [])
+
+  const filteredColaboradores = colaboradores.filter((c) => {
     if (filter !== 'Todos' && c.status !== filter) return false
     if (
       search &&
-      !c.name.toLowerCase().includes(search.toLowerCase()) &&
-      !c.email.toLowerCase().includes(search.toLowerCase())
+      !c.name?.toLowerCase().includes(search.toLowerCase()) &&
+      !c.email?.toLowerCase().includes(search.toLowerCase())
     )
       return false
     return true
   })
 
-  const activeCount = COLABORADORES_DATA.filter((c) => c.status === 'Ativo').length
+  const activeCount = colaboradores.filter((c) => c.status === 'Ativo').length
 
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto animate-fade-in">
@@ -81,10 +92,7 @@ export default function Colaboradores() {
               </button>
             ))}
           </div>
-          <Button className="bg-foreground text-background hover:bg-foreground/90 ml-auto md:ml-2">
-            <Plus className="h-4 w-4 mr-2" />
-            Adicionar Colaborador
-          </Button>
+          <ColaboradorFormModal onSaved={fetchColaboradores} />
         </div>
       </div>
 
@@ -98,11 +106,8 @@ export default function Colaboradores() {
             <CardContent className="p-6">
               <div className="flex justify-between items-start mb-4">
                 <Avatar className="h-14 w-14 ring-1 ring-border">
-                  {colaborador.avatar ? (
-                    <AvatarImage src={colaborador.avatar} alt={colaborador.name} />
-                  ) : null}
                   <AvatarFallback className="bg-primary/10 text-primary text-lg">
-                    {colaborador.initials}
+                    {colaborador.name?.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex items-center gap-2">
@@ -142,7 +147,9 @@ export default function Colaboradores() {
                 >
                   {colaborador.name}
                 </h3>
-                <p className="text-xs text-muted-foreground font-medium">{colaborador.role}</p>
+                <p className="text-xs text-muted-foreground font-medium">
+                  {colaborador.role || 'Sem Cargo'}
+                </p>
               </div>
 
               <div className="space-y-2 text-sm text-muted-foreground">
@@ -152,11 +159,11 @@ export default function Colaboradores() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Phone className="h-3.5 w-3.5 shrink-0" />
-                  <span>{colaborador.phone}</span>
+                  <span>{colaborador.phone || 'N/I'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <MapPin className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{colaborador.city}</span>
+                  <span className="truncate">{colaborador.city || 'N/I'}</span>
                 </div>
               </div>
             </CardContent>
