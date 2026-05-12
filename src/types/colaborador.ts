@@ -6,7 +6,16 @@ export interface ScheduleFormState {
   exit_time: string
 }
 
+export interface PermissionsState {
+  dashboard_principal: boolean
+  dashboard_desempenho: boolean
+  cadastros: boolean
+  operacional: boolean
+  historico: boolean
+}
+
 export interface ColaboradorFormState {
+  id?: string
   nome: string
   telefone: string
   dataNascimento: string
@@ -24,4 +33,5 @@ export interface ColaboradorFormState {
   dataAdmissao: string
   salarioBase: string
   schedules: ScheduleFormState[]
+  permissions: PermissionsState
 }

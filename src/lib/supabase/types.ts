@@ -9,6 +9,125 @@ export type Database = {
   }
   public: {
     Tables: {
+      pontos: {
+        Row: {
+          created_at: string
+          data: string
+          data_hora: string
+          foto_url: string | null
+          horario: string
+          id: string
+          latitude: number | null
+          longitude: number | null
+          nsr: number
+          profile_id: string
+          status_validacao: string | null
+          tipo_ponto: string
+          updated_at: string
+          wifi_conectado: boolean | null
+        }
+        Insert: {
+          created_at?: string
+          data: string
+          data_hora: string
+          foto_url?: string | null
+          horario: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          nsr?: number
+          profile_id: string
+          status_validacao?: string | null
+          tipo_ponto: string
+          updated_at?: string
+          wifi_conectado?: boolean | null
+        }
+        Update: {
+          created_at?: string
+          data?: string
+          data_hora?: string
+          foto_url?: string | null
+          horario?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          nsr?: number
+          profile_id?: string
+          status_validacao?: string | null
+          tipo_ponto?: string
+          updated_at?: string
+          wifi_conectado?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'pontos_profile_id_fkey'
+            columns: ['profile_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      pontos_diarios: {
+        Row: {
+          created_at: string
+          criado_por: string
+          data: string
+          entrada: string | null
+          horas_calculadas: number | null
+          id: string
+          profile_id: string
+          retorno_almoco: string | null
+          saida: string | null
+          saida_almoco: string | null
+          tipo_registro: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          criado_por: string
+          data: string
+          entrada?: string | null
+          horas_calculadas?: number | null
+          id?: string
+          profile_id: string
+          retorno_almoco?: string | null
+          saida?: string | null
+          saida_almoco?: string | null
+          tipo_registro?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          criado_por?: string
+          data?: string
+          entrada?: string | null
+          horas_calculadas?: number | null
+          id?: string
+          profile_id?: string
+          retorno_almoco?: string | null
+          saida?: string | null
+          saida_almoco?: string | null
+          tipo_registro?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'pontos_diarios_criado_por_fkey'
+            columns: ['criado_por']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'pontos_diarios_profile_id_fkey'
+            columns: ['profile_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       profiles: {
         Row: {
           access_level: string | null
@@ -140,6 +259,7 @@ export type Database = {
         }
         Returns: string
       }
+      is_manager_or_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
@@ -281,6 +401,34 @@ export const Constants = {
 // --- COLUMN TYPES (actual PostgreSQL types) ---
 // Use this to know the real database type when writing migrations.
 // "string" in TypeScript types above may be uuid, text, varchar, timestamptz, etc.
+// Table: pontos
+//   id: uuid (not null, default: gen_random_uuid())
+//   nsr: integer (not null, default: nextval('pontos_nsr_seq'::regclass))
+//   profile_id: uuid (not null)
+//   data: date (not null)
+//   data_hora: timestamp with time zone (not null)
+//   tipo_ponto: text (not null)
+//   horario: text (not null)
+//   foto_url: text (nullable)
+//   latitude: numeric (nullable)
+//   longitude: numeric (nullable)
+//   wifi_conectado: boolean (nullable)
+//   status_validacao: text (nullable)
+//   created_at: timestamp with time zone (not null, default: now())
+//   updated_at: timestamp with time zone (not null, default: now())
+// Table: pontos_diarios
+//   id: uuid (not null, default: gen_random_uuid())
+//   profile_id: uuid (not null)
+//   criado_por: uuid (not null)
+//   data: date (not null)
+//   entrada: text (nullable)
+//   saida_almoco: text (nullable)
+//   retorno_almoco: text (nullable)
+//   saida: text (nullable)
+//   tipo_registro: text (nullable, default: 'automático'::text)
+//   horas_calculadas: numeric (nullable, default: 0)
+//   created_at: timestamp with time zone (not null, default: now())
+//   updated_at: timestamp with time zone (not null, default: now())
 // Table: profiles
 //   id: uuid (not null)
 //   email: text (not null)
@@ -311,6 +459,14 @@ export const Constants = {
 //   exit_time: time without time zone (nullable)
 
 // --- CONSTRAINTS ---
+// Table: pontos
+//   UNIQUE pontos_nsr_key: UNIQUE (nsr)
+//   PRIMARY KEY pontos_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY pontos_profile_id_fkey: FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+// Table: pontos_diarios
+//   FOREIGN KEY pontos_diarios_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES profiles(id) ON DELETE CASCADE
+//   PRIMARY KEY pontos_diarios_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY pontos_diarios_profile_id_fkey: FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
 // Table: profiles
 //   FOREIGN KEY profiles_id_fkey: FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE
 //   PRIMARY KEY profiles_pkey: PRIMARY KEY (id)
@@ -320,6 +476,24 @@ export const Constants = {
 //   FOREIGN KEY schedules_profile_id_fkey: FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
 
 // --- ROW LEVEL SECURITY POLICIES ---
+// Table: pontos
+//   Policy "pontos_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND (profiles.access_level = 'total'::text))))
+//   Policy "pontos_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: ((profile_id = auth.uid()) OR is_manager_or_admin())
+//   Policy "pontos_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: ((profile_id = auth.uid()) OR is_manager_or_admin())
+//   Policy "pontos_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: ((profile_id = auth.uid()) OR is_manager_or_admin())
+// Table: pontos_diarios
+//   Policy "pontos_diarios_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND (profiles.access_level = 'total'::text))))
+//   Policy "pontos_diarios_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: ((profile_id = auth.uid()) OR is_manager_or_admin())
+//   Policy "pontos_diarios_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: ((profile_id = auth.uid()) OR is_manager_or_admin())
+//   Policy "pontos_diarios_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: ((profile_id = auth.uid()) OR is_manager_or_admin())
 // Table: profiles
 //   Policy "profiles_delete" (DELETE, PERMISSIVE) roles={authenticated}
 //     USING: true
@@ -401,6 +575,21 @@ export const Constants = {
 //   END;
 //   $function$
 //
+// FUNCTION is_manager_or_admin()
+//   CREATE OR REPLACE FUNCTION public.is_manager_or_admin()
+//    RETURNS boolean
+//    LANGUAGE plpgsql
+//    SECURITY DEFINER
+//   AS $function$
+//   BEGIN
+//     RETURN EXISTS (
+//       SELECT 1 FROM public.profiles
+//       WHERE id = auth.uid()
+//       AND access_level IN ('total', 'gerencia')
+//     );
+//   END;
+//   $function$
+//
 // FUNCTION rls_auto_enable()
 //   CREATE OR REPLACE FUNCTION public.rls_auto_enable()
 //    RETURNS event_trigger
@@ -434,5 +623,12 @@ export const Constants = {
 //
 
 // --- INDEXES ---
+// Table: pontos
+//   CREATE INDEX pontos_data_idx ON public.pontos USING btree (data)
+//   CREATE UNIQUE INDEX pontos_nsr_key ON public.pontos USING btree (nsr)
+//   CREATE INDEX pontos_profile_id_idx ON public.pontos USING btree (profile_id)
+// Table: pontos_diarios
+//   CREATE INDEX pontos_diarios_data_idx ON public.pontos_diarios USING btree (data)
+//   CREATE INDEX pontos_diarios_profile_id_idx ON public.pontos_diarios USING btree (profile_id)
 // Table: schedules
 //   CREATE UNIQUE INDEX schedules_profile_id_day_of_week_key ON public.schedules USING btree (profile_id, day_of_week)
