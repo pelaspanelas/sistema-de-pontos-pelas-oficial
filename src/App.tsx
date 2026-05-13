@@ -20,6 +20,38 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>
 }
 
+const PermissionGuard = ({
+  permission,
+  requiresGerenciaOrAdmin,
+  children,
+}: {
+  permission?: string
+  requiresGerenciaOrAdmin?: boolean
+  children: React.ReactNode
+}) => {
+  const { profile, loading } = useAuth()
+
+  if (loading) return null
+  if (!profile) return <Navigate to="/ponto" replace />
+
+  const isAdmin = profile.access_level === 'total'
+  const isGerencia = profile.access_level === 'gerencia'
+
+  if (isAdmin) return <>{children}</>
+
+  const permissions = (profile.permissions as Record<string, boolean>) || {}
+
+  if (permission && !permissions[permission]) {
+    return <Navigate to="/ponto" replace />
+  }
+
+  if (requiresGerenciaOrAdmin && !isGerencia) {
+    return <Navigate to="/ponto" replace />
+  }
+
+  return <>{children}</>
+}
+
 const App = () => (
   <BrowserRouter future={{ v7_startTransition: false, v7_relativeSplatPath: false }}>
     <AuthProvider>
@@ -38,18 +70,89 @@ const App = () => (
           >
             <Route path="/" element={<Navigate to="/ponto" replace />} />
             <Route path="/ponto" element={<Ponto />} />
-            <Route path="/espelho-ponto" element={<EspelhoPonto />} />
-            <Route path="/colaboradores" element={<Colaboradores />} />
+
+            <Route
+              path="/espelho-ponto"
+              element={
+                <PermissionGuard permission="operacional">
+                  <EspelhoPonto />
+                </PermissionGuard>
+              }
+            />
+            <Route
+              path="/colaboradores"
+              element={
+                <PermissionGuard permission="cadastros">
+                  <Colaboradores />
+                </PermissionGuard>
+              }
+            />
 
             {/* Redirects for non-implemented routes mentioned in sidebar to keep UI functional */}
-            <Route path="/desempenho" element={<Navigate to="/" replace />} />
-            <Route path="/cargos-funcoes" element={<Navigate to="/colaboradores" replace />} />
-            <Route path="/tarefas" element={<Navigate to="/colaboradores" replace />} />
-            <Route path="/ferias" element={<Navigate to="/espelho-ponto" replace />} />
-            <Route path="/folha-pagamento" element={<Navigate to="/espelho-ponto" replace />} />
-            <Route path="/relatorios" element={<Navigate to="/" replace />} />
-            <Route path="/avaliacoes" element={<Navigate to="/colaboradores" replace />} />
-            <Route path="/bonificacoes" element={<Navigate to="/" replace />} />
+            <Route
+              path="/desempenho"
+              element={
+                <PermissionGuard permission="dashboard_desempenho">
+                  <Navigate to="/" replace />
+                </PermissionGuard>
+              }
+            />
+            <Route
+              path="/cargos-funcoes"
+              element={
+                <PermissionGuard permission="cadastros">
+                  <Navigate to="/colaboradores" replace />
+                </PermissionGuard>
+              }
+            />
+            <Route
+              path="/tarefas"
+              element={
+                <PermissionGuard permission="cadastros">
+                  <Navigate to="/colaboradores" replace />
+                </PermissionGuard>
+              }
+            />
+            <Route
+              path="/ferias"
+              element={
+                <PermissionGuard permission="operacional">
+                  <Navigate to="/espelho-ponto" replace />
+                </PermissionGuard>
+              }
+            />
+            <Route
+              path="/folha-pagamento"
+              element={
+                <PermissionGuard permission="operacional" requiresGerenciaOrAdmin>
+                  <Navigate to="/espelho-ponto" replace />
+                </PermissionGuard>
+              }
+            />
+            <Route
+              path="/relatorios"
+              element={
+                <PermissionGuard permission="historico">
+                  <Navigate to="/" replace />
+                </PermissionGuard>
+              }
+            />
+            <Route
+              path="/avaliacoes"
+              element={
+                <PermissionGuard permission="historico">
+                  <Navigate to="/colaboradores" replace />
+                </PermissionGuard>
+              }
+            />
+            <Route
+              path="/bonificacoes"
+              element={
+                <PermissionGuard permission="historico">
+                  <Navigate to="/" replace />
+                </PermissionGuard>
+              }
+            />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

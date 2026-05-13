@@ -1,10 +1,18 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase/client'
+import { toast } from '@/hooks/use-toast'
+
+interface Profile {
+  id: string
+  access_level: string | null
+  permissions: any
+}
 
 interface AuthContextType {
   user: User | null
   session: Session | null
+  profile: Profile | null
   signUp: (email: string, password: string) => Promise<{ error: any }>
   signIn: (email: string, password: string) => Promise<{ error: any }>
   signOut: () => Promise<{ error: any }>
@@ -22,21 +30,54 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const loadProfile = async (userId: string) => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, access_level, permissions')
+          .eq('id', userId)
+          .single()
+
+        if (error) throw error
+        setProfile(data)
+      } catch (err) {
+        console.error(err)
+        toast({
+          title: 'Erro ao buscar permissões',
+          description: 'Não foi possível carregar as permissões do usuário.',
+          variant: 'destructive',
+        })
+        setProfile(null)
+      }
+    }
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
       setUser(session?.user ?? null)
-      setLoading(false)
+      if (session?.user) {
+        loadProfile(session.user.id).then(() => setLoading(false))
+      } else {
+        setProfile(null)
+        setLoading(false)
+      }
     })
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setUser(session?.user ?? null)
-      setLoading(false)
+      if (session?.user) {
+        loadProfile(session.user.id).then(() => setLoading(false))
+      } else {
+        setLoading(false)
+      }
     })
+
     return () => subscription.unsubscribe()
   }, [])
 
@@ -48,17 +89,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     })
     return { error }
   }
+
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     return { error }
   }
+
   const signOut = async () => {
     const { error } = await supabase.auth.signOut()
     return { error }
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, signUp, signIn, signOut, loading }}>
+    <AuthContext.Provider value={{ user, session, profile, signUp, signIn, signOut, loading }}>
       {children}
     </AuthContext.Provider>
   )
