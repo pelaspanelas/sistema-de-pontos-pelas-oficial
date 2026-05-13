@@ -69,11 +69,30 @@ export async function registrarPonto({
   const colName = colMap[tipoPonto]
 
   if (record) {
+    const updates: any = { [colName]: horario }
+
+    const tEntrada = colName === 'entrada' ? horario : record.entrada
+    const tSaidaAlmoco = colName === 'saida_almoco' ? horario : record.saida_almoco
+    const tRetornoAlmoco = colName === 'retorno_almoco' ? horario : record.retorno_almoco
+    const tSaida = colName === 'saida' ? horario : record.saida
+
+    if (tEntrada && tSaidaAlmoco && tRetornoAlmoco && tSaida) {
+      const parseTime = (t: string) => {
+        const [h, m] = t.split(':').map(Number)
+        return h * 60 + m
+      }
+      const m1 = parseTime(tEntrada)
+      const m2 = parseTime(tSaidaAlmoco)
+      const m3 = parseTime(tRetornoAlmoco)
+      const m4 = parseTime(tSaida)
+
+      const totalMinutes = m2 - m1 + (m4 - m3)
+      updates.horas_calculadas = totalMinutes / 60
+    }
+
     const { error: err2 } = await supabase
       .from('pontos_diarios')
-      .update({
-        [colName]: horario,
-      })
+      .update(updates)
       .eq('id', record.id)
     if (err2) throw err2
   } else {
