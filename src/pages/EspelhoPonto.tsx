@@ -16,11 +16,23 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Calendar as CalendarIcon, Clock } from 'lucide-react'
+import { Calendar as CalendarIcon, Clock, Pencil } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/hooks/use-toast'
 import { format, parseISO, endOfMonth } from 'date-fns'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
 
 const MONTHS = [
   { value: '0', label: 'Janeiro' },
@@ -65,31 +77,187 @@ function formatDecimalBalance(decimal: number | null | undefined) {
   return `${isNegative ? '-' : '+'}${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
 }
 
+function getHoursColor(decimal: number | null | undefined) {
+  if (!decimal) return 'text-muted-foreground'
+  const mins = Math.round(decimal * 60)
+  return mins >= 440 ? 'text-emerald-600' : 'text-red-600'
+}
+
+function AjusteModal({
+  open,
+  onOpenChange,
+  dataPonto,
+  tipoPonto,
+  onSubmit,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  dataPonto: string
+  tipoPonto: string
+  onSubmit: (data: any) => Promise<void>
+}) {
+  const [form, setForm] = useState({ tipo_ponto: tipoPonto, horario_solicitado: '', motivo: '' })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { toast } = useToast()
+
+  useEffect(() => {
+    if (open) {
+      setForm({ tipo_ponto: tipoPonto || 'entrada', horario_solicitado: '', motivo: '' })
+    }
+  }, [open, tipoPonto])
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.horario_solicitado.match(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)) {
+      toast({
+        variant: 'destructive',
+        title: 'Horário inválido',
+        description: 'Use o formato HH:mm',
+      })
+      return
+    }
+    if (form.motivo.length < 10) {
+      toast({
+        variant: 'destructive',
+        title: 'Justificativa muito curta',
+        description: 'Mínimo de 10 caracteres',
+      })
+      return
+    }
+    setIsSubmitting(true)
+    await onSubmit(form)
+    setIsSubmitting(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Solicitar Ajuste de Ponto</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Data</Label>
+            <Input value={dataPonto ? format(parseISO(dataPonto), 'dd/MM/yyyy') : ''} disabled />
+          </div>
+          <div className="space-y-2">
+            <Label>Tipo de Ponto</Label>
+            <Select
+              value={form.tipo_ponto}
+              onValueChange={(v) => setForm((prev) => ({ ...prev, tipo_ponto: v }))}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="entrada">Entrada 1</SelectItem>
+                <SelectItem value="saida_almoco">Saída 1 (Almoço)</SelectItem>
+                <SelectItem value="retorno_almoco">Entrada 2 (Retorno)</SelectItem>
+                <SelectItem value="saida">Saída 2</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Horário Solicitado (HH:mm)</Label>
+            <Input
+              placeholder="00:00"
+              value={form.horario_solicitado}
+              onChange={(e) => {
+                let v = e.target.value.replace(/\D/g, '')
+                if (v.length > 4) v = v.slice(0, 4)
+                if (v.length >= 3) {
+                  v = v.slice(0, 2) + ':' + v.slice(2)
+                }
+                setForm((prev) => ({ ...prev, horario_solicitado: v }))
+              }}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Justificativa</Label>
+            <Textarea
+              placeholder="Por que não bateu o ponto? (mínimo 10 caracteres)"
+              value={form.motivo}
+              onChange={(e) => setForm((prev) => ({ ...prev, motivo: e.target.value }))}
+              maxLength={500}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              Enviar Solicitação
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function EspelhoPonto() {
   const { user, profile } = useAuth()
   const { toast } = useToast()
 
   const [loading, setLoading] = useState(true)
   const [records, setRecords] = useState<any[]>([])
+  const [ajustesPendentes, setAjustesPendentes] = useState<any[]>([])
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth().toString())
   const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR)
   const [selectedUser, setSelectedUser] = useState<string>('me')
 
+  const [ajusteModal, setAjusteModal] = useState(false)
+  const [ajusteData, setAjusteData] = useState({ data_ponto: '', tipo_ponto: '' })
+
   const isManagerOrAdmin = profile?.access_level === 'total' || profile?.access_level === 'gerencia'
 
   useEffect(() => {
-    if (isManagerOrAdmin) {
-      fetchUsers()
-    }
+    if (isManagerOrAdmin) fetchUsers()
   }, [isManagerOrAdmin])
 
   useEffect(() => {
-    if (user) {
-      fetchRecords()
-    }
+    if (user) fetchRecords()
   }, [user, selectedMonth, selectedYear, selectedUser])
+
+  useEffect(() => {
+    let changed = false
+    const updates: any[] = []
+    const newRecords = records.map((r) => {
+      if (r.entrada && r.saida_almoco && r.retorno_almoco && r.saida) {
+        const parseTime = (t: string) => {
+          const [h, m] = t.split(':').map(Number)
+          return h * 60 + m
+        }
+        const m1 = parseTime(r.entrada)
+        const m2 = parseTime(r.saida_almoco)
+        const m3 = parseTime(r.retorno_almoco)
+        const m4 = parseTime(r.saida)
+        const totalMins = m2 - m1 + (m4 - m3)
+        const hrs = totalMins / 60
+
+        const currentHrs = r.horas_calculadas ? Number(r.horas_calculadas) : null
+        if (currentHrs === null || Math.abs(currentHrs - hrs) > 0.001) {
+          changed = true
+          updates.push({ id: r.id, horas_calculadas: hrs })
+          return { ...r, horas_calculadas: hrs }
+        }
+      }
+      return r
+    })
+
+    if (changed) {
+      setRecords(newRecords)
+      updates.forEach((u) => {
+        supabase
+          .from('pontos_diarios')
+          .update({ horas_calculadas: u.horas_calculadas })
+          .eq('id', u.id)
+          .then()
+      })
+    }
+  }, [records])
 
   async function fetchUsers() {
     try {
@@ -121,22 +289,30 @@ export default function EspelhoPonto() {
       const start = format(new Date(yearInt, monthInt, 1), 'yyyy-MM-dd')
       const end = format(endOfMonth(new Date(yearInt, monthInt, 1)), 'yyyy-MM-dd')
 
-      const { data, error } = await supabase
-        .from('pontos_diarios')
-        .select('*')
-        .eq('profile_id', targetUserId)
-        .gte('data', start)
-        .lte('data', end)
-        .order('data', { ascending: false })
+      const [resPontos, resAjustes] = await Promise.all([
+        supabase
+          .from('pontos_diarios')
+          .select('*')
+          .eq('profile_id', targetUserId)
+          .gte('data', start)
+          .lte('data', end)
+          .order('data', { ascending: false }),
+        supabase
+          .from('ajuste_ponto')
+          .select('*')
+          .eq('usuario_id', targetUserId)
+          .eq('status', 'pendente')
+          .gte('data_ponto', start)
+          .lte('data_ponto', end),
+      ])
 
-      if (error) throw error
-      setRecords(data || [])
+      if (resPontos.error) throw resPontos.error
+      if (resAjustes.error) throw resAjustes.error
+
+      setRecords(resPontos.data || [])
+      setAjustesPendentes(resAjustes.data || [])
     } catch (err: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao buscar registros',
-        description: err.message,
-      })
+      toast({ variant: 'destructive', title: 'Erro ao buscar registros', description: err.message })
     } finally {
       setLoading(false)
     }
@@ -160,6 +336,100 @@ export default function EspelhoPonto() {
 
   const totalBalance = rowsWithBalance.length > 0 ? rowsWithBalance[0].saldo_acumulado : 0
   const isPositive = totalBalance >= 0
+
+  function openAjusteModal(data_ponto: string, tipo_ponto: string) {
+    setAjusteData({ data_ponto, tipo_ponto })
+    setAjusteModal(true)
+  }
+
+  async function handleAjusteSubmit(form: any) {
+    const targetUserId = selectedUser === 'me' ? user?.id : selectedUser
+    if (!targetUserId) return
+
+    const { error } = await supabase.from('ajuste_ponto').insert({
+      usuario_id: targetUserId,
+      data_ponto: ajusteData.data_ponto,
+      horario_solicitado: form.horario_solicitado,
+      motivo: form.motivo,
+      tipo_ponto: form.tipo_ponto,
+      status: 'pendente',
+    } as any)
+
+    if (error) throw error
+
+    toast({
+      title: 'Solicitação enviada para análise',
+      className: 'bg-emerald-50 text-emerald-900 border-emerald-200',
+    })
+    setAjusteModal(false)
+    fetchRecords()
+  }
+
+  const renderCell = (row: any, field: string) => {
+    const value = row[field]
+    if (value) return <span className="text-muted-foreground">{value}</span>
+
+    const hasPending = ajustesPendentes.some(
+      (a) => a.data_ponto === row.data && a.tipo_ponto === field,
+    )
+
+    if (hasPending) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center text-orange-500 text-xs font-medium cursor-help gap-1">
+              --:-- <Clock className="w-3 h-3" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Ajuste solicitado - Aguardando aprovação</TooltipContent>
+        </Tooltip>
+      )
+    }
+
+    return (
+      <span className="flex items-center gap-1 text-muted-foreground group">
+        --:--
+        <button
+          type="button"
+          title="Solicitar Ajuste"
+          className="text-muted-foreground/40 hover:text-primary transition-colors disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
+          onClick={() => openAjusteModal(row.data, field)}
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+      </span>
+    )
+  }
+
+  const renderMobileCell = (row: any, field: string, label: string) => {
+    const value = row[field]
+    const hasPending = ajustesPendentes.some(
+      (a) => a.data_ponto === row.data && a.tipo_ponto === field,
+    )
+
+    return (
+      <div>
+        <span className="text-muted-foreground block text-xs">{label}</span>
+        <span className="font-medium flex items-center gap-2">
+          {value || '--:--'}
+          {!value && !hasPending && (
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-primary"
+              onClick={() => openAjusteModal(row.data, field)}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </span>
+        {!value && hasPending && (
+          <span className="text-xs text-orange-500 block mt-1">
+            Ajuste solicitado - Aguardando aprovação
+          </span>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto animate-fade-in">
@@ -259,7 +529,6 @@ export default function EspelhoPonto() {
             </div>
           ) : (
             <>
-              {/* Desktop View */}
               <div className="hidden md:block rounded-md border overflow-x-auto">
                 <Table>
                   <TableHeader className="bg-muted/50">
@@ -279,28 +548,16 @@ export default function EspelhoPonto() {
                         <TableCell className="font-medium">
                           {format(parseISO(row.data), 'dd/MM/yyyy')}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {row.entrada || '--:--'}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {row.saida_almoco || '--:--'}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {row.retorno_almoco || '--:--'}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {row.saida || '--:--'}
-                        </TableCell>
-                        <TableCell className="font-medium">
+                        <TableCell>{renderCell(row, 'entrada')}</TableCell>
+                        <TableCell>{renderCell(row, 'saida_almoco')}</TableCell>
+                        <TableCell>{renderCell(row, 'retorno_almoco')}</TableCell>
+                        <TableCell>{renderCell(row, 'saida')}</TableCell>
+                        <TableCell className={`font-medium ${getHoursColor(row.horas_calculadas)}`}>
                           {formatDecimalHours(row.horas_calculadas)}
                         </TableCell>
                         <TableCell
                           className={`text-right font-medium ${
-                            row.saldo_acumulado > 0
-                              ? 'text-emerald-600'
-                              : row.saldo_acumulado < 0
-                                ? 'text-red-600'
-                                : 'text-muted-foreground'
+                            row.saldo_acumulado >= 0 ? 'text-emerald-600' : 'text-red-600'
                           }`}
                         >
                           {formatDecimalBalance(row.saldo_acumulado)}
@@ -311,7 +568,6 @@ export default function EspelhoPonto() {
                 </Table>
               </div>
 
-              {/* Mobile View */}
               <div className="md:hidden space-y-4">
                 {rowsWithBalance.map((row) => (
                   <Card key={row.id} className="overflow-hidden">
@@ -321,37 +577,22 @@ export default function EspelhoPonto() {
                       </span>
                       <span
                         className={`text-sm font-medium ${
-                          row.saldo_acumulado > 0
-                            ? 'text-emerald-600'
-                            : row.saldo_acumulado < 0
-                              ? 'text-red-600'
-                              : 'text-muted-foreground'
+                          row.saldo_acumulado >= 0 ? 'text-emerald-600' : 'text-red-600'
                         }`}
                       >
                         Saldo: {formatDecimalBalance(row.saldo_acumulado)}
                       </span>
                     </div>
                     <CardContent className="p-4 grid grid-cols-2 gap-y-3 text-sm">
-                      <div>
-                        <span className="text-muted-foreground block text-xs">Entrada 1</span>
-                        <span className="font-medium">{row.entrada || '--:--'}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block text-xs">Saída 1</span>
-                        <span className="font-medium">{row.saida_almoco || '--:--'}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block text-xs">Entrada 2</span>
-                        <span className="font-medium">{row.retorno_almoco || '--:--'}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block text-xs">Saída 2</span>
-                        <span className="font-medium">{row.saida || '--:--'}</span>
-                      </div>
+                      {renderMobileCell(row, 'entrada', 'Entrada 1')}
+                      {renderMobileCell(row, 'saida_almoco', 'Saída 1')}
+                      {renderMobileCell(row, 'retorno_almoco', 'Entrada 2')}
+                      {renderMobileCell(row, 'saida', 'Saída 2')}
+
                       <div className="col-span-2 pt-2 border-t mt-1 flex justify-between">
                         <div>
                           <span className="text-muted-foreground text-xs mr-2">Total Horas:</span>
-                          <span className="font-semibold">
+                          <span className={`font-semibold ${getHoursColor(row.horas_calculadas)}`}>
                             {formatDecimalHours(row.horas_calculadas)}
                           </span>
                         </div>
@@ -364,6 +605,14 @@ export default function EspelhoPonto() {
           )}
         </CardContent>
       </Card>
+
+      <AjusteModal
+        open={ajusteModal}
+        onOpenChange={setAjusteModal}
+        dataPonto={ajusteData.data_ponto}
+        tipoPonto={ajusteData.tipo_ponto}
+        onSubmit={handleAjusteSubmit}
+      />
     </div>
   )
 }

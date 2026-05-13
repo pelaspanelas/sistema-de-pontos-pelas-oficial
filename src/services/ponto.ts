@@ -47,6 +47,7 @@ export async function registrarPonto({
 
   const { error: err1 } = await supabase.from('pontos').insert({
     profile_id: profileId,
+    criado_por: profileId,
     data,
     data_hora: dataHora,
     tipo_ponto: tipoPonto,
