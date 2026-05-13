@@ -237,7 +237,7 @@ export default function Ponto() {
       if (step === 'retorno_almoco') tipoPonto = 'almoço_retorno'
       if (step === 'saida') tipoPonto = 'saída'
 
-      await registrarPonto({
+      const result = await registrarPonto({
         profileId: user.id,
         data: todayStr,
         dataHora: now.toISOString(),
@@ -248,19 +248,35 @@ export default function Ponto() {
         longitude: userLocation.lon,
       })
 
-      toast({
-        title: 'Ponto Registrado!',
-        description: `Registro efetuado com sucesso às ${timeStr}`,
-        className: 'bg-emerald-50 text-emerald-900 border-emerald-200',
-      })
+      if (result?.toastVariant === 'warning') {
+        toast({
+          title: 'Atenção',
+          description: result.toastMsg,
+          className: 'bg-yellow-50 text-yellow-900 border-yellow-200',
+        })
+      } else {
+        toast({
+          title: 'Ponto Registrado!',
+          description: `Registro efetuado com sucesso às ${timeStr}`,
+          className: 'bg-emerald-50 text-emerald-900 border-emerald-200',
+        })
+      }
 
       await loadPontoStatus()
     } catch (err: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao registrar ponto',
-        description: err.message || 'Ocorreu um erro desconhecido.',
-      })
+      if (err.message === 'FORA_DO_HORARIO') {
+        toast({
+          variant: 'destructive',
+          title: 'Acesso Negado',
+          description: 'Fora do horário de trabalho',
+        })
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao registrar ponto',
+          description: err.message || 'Ocorreu um erro desconhecido.',
+        })
+      }
     } finally {
       setIsCheckingIn(false)
     }

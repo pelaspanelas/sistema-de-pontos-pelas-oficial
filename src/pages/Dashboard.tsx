@@ -23,7 +23,8 @@ import { PieChart, Pie, Cell, Legend } from 'recharts'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { format, differenceInYears, parseISO, startOfMonth, endOfMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { Check, X, Clock, Users, CalendarOff, Loader2 } from 'lucide-react'
+import { Check, X, Clock, Users, CalendarOff, Loader2, AlertCircle } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -40,6 +41,7 @@ export default function Dashboard() {
   const [bancoHoras, setBancoHoras] = useState({ text: '00:00', isPositive: true })
   const [ajustes, setAjustes] = useState<any[]>([])
   const [tempoCasa, setTempoCasa] = useState<any[]>([])
+  const [pontosForaHorario, setPontosForaHorario] = useState<any[]>([])
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth().toString())
   const [selectedStatus, setSelectedStatus] = useState('pendente')
@@ -132,6 +134,21 @@ export default function Dashboard() {
         .not('admission_date', 'is', null)
 
       if (err4) throw err4
+
+      // Pontos Fora do Horário
+      const { data: foraHorarioData, error: errForaHorario } = await supabase
+        .from('pontos')
+        .select(`
+          id, data, horario, tipo_ponto, status_validacao, created_at,
+          profiles!pontos_profile_id_fkey(name)
+        `)
+        .not('status_validacao', 'is', null)
+        .gte('data', targetMonthStart)
+        .lte('data', targetMonthEnd)
+        .order('created_at', { ascending: false })
+
+      if (errForaHorario) throw errForaHorario
+      setPontosForaHorario(foraHorarioData || [])
 
       const faixas = {
         '0-1 ano': 0,
@@ -572,6 +589,62 @@ export default function Dashboard() {
               </ChartContainer>
             ) : (
               <div className="text-center text-muted-foreground">Nenhum dado disponível</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card className="md:col-span-3">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-orange-600">
+              <AlertCircle className="w-5 h-5" />
+              Pontos Fora do Horário
+            </CardTitle>
+            <CardDescription>
+              Registros de entrada antecipada ou saída tardia no mês selecionado
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {pontosForaHorario.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg bg-muted/20">
+                Nenhum ponto fora do horário registrado neste mês.
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {pontosForaHorario.map((p) => {
+                  const status = p.status_validacao || ''
+                  const diffStr = status.split(':')[1] || '0'
+                  const diff = parseInt(diffStr, 10)
+                  const typeLabel = status.startsWith('aviso_antecipado')
+                    ? 'Entrada antes do horário'
+                    : 'Saída após o horário'
+
+                  return (
+                    <Card key={p.id} className="bg-orange-50/50 border-orange-100 shadow-sm">
+                      <CardContent className="p-4 flex flex-col gap-2">
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="font-semibold text-sm leading-tight">
+                            {p.profiles?.name || 'Desconhecido'}
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className="bg-orange-100 text-orange-800 border-orange-200 whitespace-nowrap"
+                          >
+                            {diff > 0 ? `+${diff} min` : `${diff} min`}
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {format(parseISO(p.data), 'dd/MM/yyyy')} às {p.horario}
+                        </div>
+                        <div className="text-xs font-medium text-orange-700 mt-1 bg-orange-100/50 px-2 py-1 rounded w-fit">
+                          {typeLabel}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
             )}
           </CardContent>
         </Card>

@@ -29,6 +29,57 @@ export async function registrarPonto({
   latitude: number
   longitude: number
 }) {
+  let statusValidacao = null
+  let toastMsg = null
+  let toastVariant = 'default'
+
+  try {
+    const now = new Date(dataHora)
+    const dayOfWeek = now.getDay()
+    const { data: schedule } = await supabase
+      .from('schedules')
+      .select('*')
+      .eq('profile_id', profileId)
+      .eq('day_of_week', dayOfWeek)
+      .maybeSingle()
+
+    if (schedule) {
+      const [ah, am] = horario.split(':').map(Number)
+      const actualTime = ah * 60 + am
+
+      if (tipoPonto === 'entrada' && schedule.entry_time) {
+        const [eh, em] = schedule.entry_time.split(':').map(Number)
+        const expectedTime = eh * 60 + em
+        const diff = actualTime - expectedTime
+
+        if (diff < -20) {
+          throw new Error('FORA_DO_HORARIO')
+        } else if (diff >= -20 && diff < -5) {
+          statusValidacao = `aviso_antecipado:${diff}`
+          toastMsg = 'Ponto registrado antes do horário'
+          toastVariant = 'warning'
+        }
+      } else if (tipoPonto === 'saída' && schedule.exit_time) {
+        const [eh, em] = schedule.exit_time.split(':').map(Number)
+        const expectedTime = eh * 60 + em
+        const diff = actualTime - expectedTime
+
+        if (diff > 20) {
+          throw new Error('FORA_DO_HORARIO')
+        } else if (diff > 5 && diff <= 20) {
+          statusValidacao = `aviso_atrasado:${diff}`
+          toastMsg = 'Ponto registrado após o horário'
+          toastVariant = 'warning'
+        }
+      }
+    }
+  } catch (err: any) {
+    if (err.message === 'FORA_DO_HORARIO') {
+      throw err
+    }
+    // erro ao buscar horario, ignora e segue normal
+  }
+
   let foto_url = null
   if (fotoFile) {
     const fileName = `${profileId}/${Date.now()}.jpg`
@@ -55,6 +106,7 @@ export async function registrarPonto({
     foto_url,
     latitude,
     longitude,
+    status_validacao: statusValidacao,
   })
 
   if (err1) throw err1
@@ -106,4 +158,6 @@ export async function registrarPonto({
     })
     if (err3) throw err3
   }
+
+  return { toastMsg, toastVariant }
 }
