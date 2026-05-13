@@ -150,10 +150,10 @@ function AjusteModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="entrada">Entrada 1</SelectItem>
-                <SelectItem value="saida_almoco">Saída 1 (Almoço)</SelectItem>
-                <SelectItem value="retorno_almoco">Entrada 2 (Retorno)</SelectItem>
-                <SelectItem value="saida">Saída 2</SelectItem>
+                <SelectItem value="entrada">Entrada</SelectItem>
+                <SelectItem value="saida_almoco">Almoço (Almoço)</SelectItem>
+                <SelectItem value="retorno_almoco">Retorno (Retorno)</SelectItem>
+                <SelectItem value="saida">Saída</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -584,10 +584,10 @@ export default function EspelhoPonto() {
                       </span>
                     </div>
                     <CardContent className="p-4 grid grid-cols-2 gap-y-3 text-sm">
-                      {renderMobileCell(row, 'entrada', 'Entrada 1')}
-                      {renderMobileCell(row, 'saida_almoco', 'Saída 1')}
-                      {renderMobileCell(row, 'retorno_almoco', 'Entrada 2')}
-                      {renderMobileCell(row, 'saida', 'Saída 2')}
+                      {renderMobileCell(row, 'entrada', 'Entrada')}
+                      {renderMobileCell(row, 'saida_almoco', 'Almoço')}
+                      {renderMobileCell(row, 'retorno_almoco', 'Retorno')}
+                      {renderMobileCell(row, 'saida', 'Saída')}
 
                       <div className="col-span-2 pt-2 border-t mt-1 flex justify-between">
                         <div>
