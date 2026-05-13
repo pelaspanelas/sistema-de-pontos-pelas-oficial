@@ -6,6 +6,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider, useAuth } from './hooks/use-auth'
 import Layout from './components/Layout'
 import Ponto from './pages/Ponto'
+import Dashboard from './pages/Dashboard'
 import ChangePassword from './pages/ChangePassword'
 import EspelhoPonto from './pages/EspelhoPonto'
 import Colaboradores from './pages/Colaboradores'
@@ -68,7 +69,14 @@ const App = () => (
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<Navigate to="/ponto" replace />} />
+            <Route
+              path="/"
+              element={
+                <PermissionGuard permission="dashboard_principal" requiresGerenciaOrAdmin>
+                  <Dashboard />
+                </PermissionGuard>
+              }
+            />
             <Route path="/ponto" element={<Ponto />} />
 
             <Route

@@ -9,9 +9,61 @@ export type Database = {
   }
   public: {
     Tables: {
+      ajuste_ponto: {
+        Row: {
+          aprovado_por: string | null
+          created_at: string | null
+          data_ponto: string
+          horario_solicitado: string
+          id: string
+          motivo: string
+          status: string | null
+          updated_at: string | null
+          usuario_id: string
+        }
+        Insert: {
+          aprovado_por?: string | null
+          created_at?: string | null
+          data_ponto: string
+          horario_solicitado: string
+          id?: string
+          motivo: string
+          status?: string | null
+          updated_at?: string | null
+          usuario_id: string
+        }
+        Update: {
+          aprovado_por?: string | null
+          created_at?: string | null
+          data_ponto?: string
+          horario_solicitado?: string
+          id?: string
+          motivo?: string
+          status?: string | null
+          updated_at?: string | null
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'ajuste_ponto_aprovado_por_fkey'
+            columns: ['aprovado_por']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'ajuste_ponto_usuario_id_fkey'
+            columns: ['usuario_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       pontos: {
         Row: {
           created_at: string
+          criado_por: string | null
           data: string
           data_hora: string
           foto_url: string | null
@@ -23,11 +75,13 @@ export type Database = {
           profile_id: string
           status_validacao: string | null
           tipo_ponto: string
+          tipo_registro: string | null
           updated_at: string
           wifi_conectado: boolean | null
         }
         Insert: {
           created_at?: string
+          criado_por?: string | null
           data: string
           data_hora: string
           foto_url?: string | null
@@ -39,11 +93,13 @@ export type Database = {
           profile_id: string
           status_validacao?: string | null
           tipo_ponto: string
+          tipo_registro?: string | null
           updated_at?: string
           wifi_conectado?: boolean | null
         }
         Update: {
           created_at?: string
+          criado_por?: string | null
           data?: string
           data_hora?: string
           foto_url?: string | null
@@ -55,10 +111,18 @@ export type Database = {
           profile_id?: string
           status_validacao?: string | null
           tipo_ponto?: string
+          tipo_registro?: string | null
           updated_at?: string
           wifi_conectado?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: 'pontos_criado_por_fkey'
+            columns: ['criado_por']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
           {
             foreignKeyName: 'pontos_profile_id_fkey'
             columns: ['profile_id']
@@ -454,6 +518,16 @@ export const Constants = {
 // --- COLUMN TYPES (actual PostgreSQL types) ---
 // Use this to know the real database type when writing migrations.
 // "string" in TypeScript types above may be uuid, text, varchar, timestamptz, etc.
+// Table: ajuste_ponto
+//   id: uuid (not null, default: gen_random_uuid())
+//   usuario_id: uuid (not null)
+//   aprovado_por: uuid (nullable)
+//   data_ponto: date (not null)
+//   horario_solicitado: text (not null)
+//   motivo: text (not null)
+//   status: text (nullable, default: 'pendente'::text)
+//   created_at: timestamp with time zone (nullable, default: now())
+//   updated_at: timestamp with time zone (nullable, default: now())
 // Table: pontos
 //   id: uuid (not null, default: gen_random_uuid())
 //   nsr: integer (not null, default: nextval('pontos_nsr_seq'::regclass))
@@ -469,6 +543,8 @@ export const Constants = {
 //   status_validacao: text (nullable)
 //   created_at: timestamp with time zone (not null, default: now())
 //   updated_at: timestamp with time zone (not null, default: now())
+//   criado_por: uuid (nullable)
+//   tipo_registro: text (nullable, default: 'automático'::text)
 // Table: pontos_diarios
 //   id: uuid (not null, default: gen_random_uuid())
 //   profile_id: uuid (not null)
@@ -514,7 +590,12 @@ export const Constants = {
 //   exit_time: time without time zone (nullable)
 
 // --- CONSTRAINTS ---
+// Table: ajuste_ponto
+//   FOREIGN KEY ajuste_ponto_aprovado_por_fkey: FOREIGN KEY (aprovado_por) REFERENCES profiles(id) ON DELETE CASCADE
+//   PRIMARY KEY ajuste_ponto_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY ajuste_ponto_usuario_id_fkey: FOREIGN KEY (usuario_id) REFERENCES profiles(id) ON DELETE CASCADE
 // Table: pontos
+//   FOREIGN KEY pontos_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES profiles(id) ON DELETE CASCADE
 //   UNIQUE pontos_nsr_key: UNIQUE (nsr)
 //   PRIMARY KEY pontos_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY pontos_profile_id_fkey: FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
@@ -531,6 +612,15 @@ export const Constants = {
 //   FOREIGN KEY schedules_profile_id_fkey: FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
 
 // --- ROW LEVEL SECURITY POLICIES ---
+// Table: ajuste_ponto
+//   Policy "ajuste_ponto_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
+//   Policy "ajuste_ponto_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: (usuario_id = auth.uid())
+//   Policy "ajuste_ponto_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: ((usuario_id = auth.uid()) OR is_manager_or_admin())
+//   Policy "ajuste_ponto_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
 // Table: pontos
 //   Policy "pontos_delete" (DELETE, PERMISSIVE) roles={authenticated}
 //     USING: (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND (profiles.access_level = 'total'::text))))
@@ -796,6 +886,10 @@ export const Constants = {
 //
 
 // --- INDEXES ---
+// Table: ajuste_ponto
+//   CREATE INDEX ajuste_ponto_data_ponto_idx ON public.ajuste_ponto USING btree (data_ponto)
+//   CREATE INDEX ajuste_ponto_status_idx ON public.ajuste_ponto USING btree (status)
+//   CREATE INDEX ajuste_ponto_usuario_id_idx ON public.ajuste_ponto USING btree (usuario_id)
 // Table: pontos
 //   CREATE INDEX pontos_data_idx ON public.pontos USING btree (data)
 //   CREATE UNIQUE INDEX pontos_nsr_key ON public.pontos USING btree (nsr)
