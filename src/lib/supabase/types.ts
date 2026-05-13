@@ -18,6 +18,7 @@ export type Database = {
           id: string
           motivo: string
           status: string | null
+          tipo_ponto: string | null
           updated_at: string | null
           usuario_id: string
         }
@@ -29,6 +30,7 @@ export type Database = {
           id?: string
           motivo: string
           status?: string | null
+          tipo_ponto?: string | null
           updated_at?: string | null
           usuario_id: string
         }
@@ -40,6 +42,7 @@ export type Database = {
           id?: string
           motivo?: string
           status?: string | null
+          tipo_ponto?: string | null
           updated_at?: string | null
           usuario_id?: string
         }
@@ -528,6 +531,7 @@ export const Constants = {
 //   status: text (nullable, default: 'pendente'::text)
 //   created_at: timestamp with time zone (nullable, default: now())
 //   updated_at: timestamp with time zone (nullable, default: now())
+//   tipo_ponto: text (nullable)
 // Table: pontos
 //   id: uuid (not null, default: gen_random_uuid())
 //   nsr: integer (not null, default: nextval('pontos_nsr_seq'::regclass))

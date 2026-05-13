@@ -23,7 +23,15 @@ import { PieChart, Pie, Cell, Legend } from 'recharts'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { format, differenceInYears, parseISO, startOfMonth, endOfMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { Check, X, Clock, Users, CalendarOff } from 'lucide-react'
+import { Check, X, Clock, Users, CalendarOff, Loader2 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 
 export default function Dashboard() {
   const { toast } = useToast()
@@ -35,6 +43,13 @@ export default function Dashboard() {
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth().toString())
   const [selectedStatus, setSelectedStatus] = useState('pendente')
+
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean
+    type: 'aprovado' | 'rejeitado'
+    ajusteId: string | null
+  }>({ open: false, type: 'aprovado', ajusteId: null })
+  const [processingId, setProcessingId] = useState<string | null>(null)
 
   const months = useMemo(() => {
     return Array.from({ length: 12 }, (_, i) => ({
@@ -155,26 +170,138 @@ export default function Dashboard() {
     return () => clearInterval(interval)
   }, [selectedMonth, selectedStatus])
 
-  const handleAction = async (id: string, status: string) => {
+  const handleConfirmAction = async () => {
+    const { type, ajusteId } = confirmModal
+    if (!ajusteId) return
+
+    setProcessingId(ajusteId)
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser()
-      const { error } = await supabase
-        .from('ajuste_ponto')
-        .update({ status, aprovado_por: user?.id })
-        .eq('id', id)
+      if (!user) throw new Error('Não autenticado')
 
-      if (error) throw error
-      toast({ title: `Ajuste ${status === 'aprovado' ? 'aprovado' : 'rejeitado'} com sucesso` })
+      if (type === 'rejeitado') {
+        const { error } = await supabase
+          .from('ajuste_ponto')
+          .update({
+            status: 'rejeitado',
+            aprovado_por: user.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', ajusteId)
+        if (error) throw error
+        toast({ title: 'Ajuste rejeitado com sucesso' })
+      } else if (type === 'aprovado') {
+        const { data: ajuste, error: errAjuste } = await supabase
+          .from('ajuste_ponto')
+          .select('*')
+          .eq('id', ajusteId)
+          .single()
+        if (errAjuste) throw errAjuste
+
+        const { data: ptDiario, error: errDiario } = await supabase
+          .from('pontos_diarios')
+          .select('*')
+          .eq('profile_id', ajuste.usuario_id)
+          .eq('data', ajuste.data_ponto)
+          .maybeSingle()
+        if (errDiario) throw errDiario
+
+        const colName = ajuste.tipo_ponto
+        if (!colName) throw new Error('Tipo de ponto inválido')
+
+        const updates: any = {
+          [colName]: ajuste.horario_solicitado,
+          tipo_registro: 'manual',
+          criado_por: user.id,
+          updated_at: new Date().toISOString(),
+        }
+
+        const tEntrada =
+          colName === 'entrada' ? ajuste.horario_solicitado : ptDiario?.entrada || null
+        const tSaidaAlmoco =
+          colName === 'saida_almoco' ? ajuste.horario_solicitado : ptDiario?.saida_almoco || null
+        const tRetornoAlmoco =
+          colName === 'retorno_almoco'
+            ? ajuste.horario_solicitado
+            : ptDiario?.retorno_almoco || null
+        const tSaida = colName === 'saida' ? ajuste.horario_solicitado : ptDiario?.saida || null
+
+        if (tEntrada && tSaidaAlmoco && tRetornoAlmoco && tSaida) {
+          const parseTime = (t: string) => {
+            const [h, m] = t.split(':').map(Number)
+            return h * 60 + m
+          }
+          const m1 = parseTime(tEntrada)
+          const m2 = parseTime(tSaidaAlmoco)
+          const m3 = parseTime(tRetornoAlmoco)
+          const m4 = parseTime(tSaida)
+          updates.horas_calculadas = (m2 - m1 + (m4 - m3)) / 60
+        }
+
+        if (ptDiario) {
+          const { error: errUpdateDiario } = await supabase
+            .from('pontos_diarios')
+            .update(updates)
+            .eq('id', ptDiario.id)
+          if (errUpdateDiario) throw errUpdateDiario
+        } else {
+          updates.profile_id = ajuste.usuario_id
+          updates.data = ajuste.data_ponto
+          const { error: errInsertDiario } = await supabase.from('pontos_diarios').insert(updates)
+          if (errInsertDiario) throw errInsertDiario
+        }
+
+        const pontoTypeMap: Record<string, string> = {
+          entrada: 'entrada',
+          saida_almoco: 'almoço_saída',
+          retorno_almoco: 'almoço_retorno',
+          saida: 'saída',
+        }
+
+        const { error: errPonto } = await supabase.from('pontos').insert({
+          profile_id: ajuste.usuario_id,
+          tipo_ponto: pontoTypeMap[colName] || 'entrada',
+          horario: ajuste.horario_solicitado,
+          data: ajuste.data_ponto,
+          data_hora: new Date(`${ajuste.data_ponto}T${ajuste.horario_solicitado}:00`).toISOString(),
+          tipo_registro: 'manual',
+          criado_por: user.id,
+        })
+        if (errPonto) throw errPonto
+
+        const { error: errAprov } = await supabase
+          .from('ajuste_ponto')
+          .update({
+            status: 'aprovado',
+            aprovado_por: user.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', ajusteId)
+        if (errAprov) throw errAprov
+
+        toast({ title: 'Ajuste aprovado com sucesso' })
+      }
+
       fetchData()
     } catch (error: any) {
       toast({
-        title: 'Erro ao atualizar ajuste',
+        title: 'Erro ao processar ajuste',
         description: error.message,
         variant: 'destructive',
       })
+    } finally {
+      setProcessingId(null)
+      setConfirmModal({ open: false, type: 'aprovado', ajusteId: null })
     }
+  }
+
+  const tipoPontoMap: Record<string, string> = {
+    entrada: 'Entrada',
+    saida_almoco: 'Saída Almoço',
+    retorno_almoco: 'Retorno Almoço',
+    saida: 'Saída',
   }
 
   const chartConfig = {
@@ -255,6 +382,44 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      <Dialog
+        open={confirmModal.open}
+        onOpenChange={(open) => !processingId && setConfirmModal((prev) => ({ ...prev, open }))}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar ação</DialogTitle>
+            <DialogDescription>
+              Deseja {confirmModal.type === 'aprovado' ? 'aprovar' : 'rejeitar'} este ajuste de
+              ponto?
+              {confirmModal.type === 'aprovado' &&
+                ' O horário do colaborador será atualizado imediatamente.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmModal((prev) => ({ ...prev, open: false }))}
+              disabled={!!processingId}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmAction}
+              disabled={!!processingId}
+              className={
+                confirmModal.type === 'aprovado'
+                  ? 'bg-green-600 hover:bg-green-700 text-white'
+                  : 'bg-red-600 hover:bg-red-700 text-white'
+              }
+            >
+              {processingId ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="grid gap-6 md:grid-cols-3">
         <Card className="md:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
@@ -314,7 +479,9 @@ export default function Dashboard() {
                           {ajuste.profiles?.name || 'Desconhecido'}
                         </TableCell>
                         <TableCell>{format(parseISO(ajuste.data_ponto), 'dd/MM/yyyy')}</TableCell>
-                        <TableCell>-</TableCell>
+                        <TableCell>
+                          {tipoPontoMap[ajuste.tipo_ponto] || ajuste.tipo_ponto}
+                        </TableCell>
                         <TableCell>{ajuste.horario_solicitado}</TableCell>
                         <TableCell className="max-w-[200px]" title={ajuste.motivo}>
                           {truncate(ajuste.motivo, 50)}
@@ -326,17 +493,39 @@ export default function Dashboard() {
                                 size="icon"
                                 variant="outline"
                                 className="h-8 w-8 text-green-600 border-green-200 hover:bg-green-50"
-                                onClick={() => handleAction(ajuste.id, 'aprovado')}
+                                onClick={() =>
+                                  setConfirmModal({
+                                    open: true,
+                                    type: 'aprovado',
+                                    ajusteId: ajuste.id,
+                                  })
+                                }
+                                disabled={processingId === ajuste.id}
                               >
-                                <Check className="h-4 w-4" />
+                                {processingId === ajuste.id && confirmModal.type === 'aprovado' ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Check className="h-4 w-4" />
+                                )}
                               </Button>
                               <Button
                                 size="icon"
                                 variant="outline"
                                 className="h-8 w-8 text-red-600 border-red-200 hover:bg-red-50"
-                                onClick={() => handleAction(ajuste.id, 'rejeitado')}
+                                onClick={() =>
+                                  setConfirmModal({
+                                    open: true,
+                                    type: 'rejeitado',
+                                    ajusteId: ajuste.id,
+                                  })
+                                }
+                                disabled={processingId === ajuste.id}
                               >
-                                <X className="h-4 w-4" />
+                                {processingId === ajuste.id && confirmModal.type === 'rejeitado' ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <X className="h-4 w-4" />
+                                )}
                               </Button>
                             </div>
                           ) : (

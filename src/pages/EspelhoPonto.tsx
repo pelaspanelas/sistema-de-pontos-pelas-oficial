@@ -202,6 +202,9 @@ export default function EspelhoPonto() {
   const [loading, setLoading] = useState(true)
   const [records, setRecords] = useState<any[]>([])
   const [ajustesPendentes, setAjustesPendentes] = useState<any[]>([])
+  const [manualPointsMap, setManualPointsMap] = useState<Record<string, Record<string, boolean>>>(
+    {},
+  )
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth().toString())
@@ -289,7 +292,7 @@ export default function EspelhoPonto() {
       const start = format(new Date(yearInt, monthInt, 1), 'yyyy-MM-dd')
       const end = format(endOfMonth(new Date(yearInt, monthInt, 1)), 'yyyy-MM-dd')
 
-      const [resPontos, resAjustes] = await Promise.all([
+      const [resPontosDiarios, resAjustes, resPontos] = await Promise.all([
         supabase
           .from('pontos_diarios')
           .select('*')
@@ -304,12 +307,35 @@ export default function EspelhoPonto() {
           .eq('status', 'pendente')
           .gte('data_ponto', start)
           .lte('data_ponto', end),
+        supabase
+          .from('pontos')
+          .select('data, tipo_ponto, tipo_registro')
+          .eq('profile_id', targetUserId)
+          .gte('data', start)
+          .lte('data', end),
       ])
 
-      if (resPontos.error) throw resPontos.error
+      if (resPontosDiarios.error) throw resPontosDiarios.error
       if (resAjustes.error) throw resAjustes.error
+      if (resPontos.error) throw resPontos.error
 
-      setRecords(resPontos.data || [])
+      const map: Record<string, Record<string, boolean>> = {}
+      resPontos.data?.forEach((p) => {
+        if (!map[p.data]) map[p.data] = {}
+        if (p.tipo_registro === 'manual') {
+          const colMap: Record<string, string> = {
+            entrada: 'entrada',
+            almoço_saída: 'saida_almoco',
+            almoço_retorno: 'retorno_almoco',
+            saída: 'saida',
+          }
+          const field = colMap[p.tipo_ponto]
+          if (field) map[p.data][field] = true
+        }
+      })
+
+      setManualPointsMap(map)
+      setRecords(resPontosDiarios.data || [])
       setAjustesPendentes(resAjustes.data || [])
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao buscar registros', description: err.message })
@@ -367,7 +393,15 @@ export default function EspelhoPonto() {
 
   const renderCell = (row: any, field: string) => {
     const value = row[field]
-    if (value) return <span className="text-muted-foreground">{value}</span>
+    const isManual = manualPointsMap[row.data]?.[field]
+
+    if (value) {
+      return (
+        <span className={isManual ? 'text-blue-600 font-semibold' : 'text-muted-foreground'}>
+          {value}
+        </span>
+      )
+    }
 
     const hasPending = ajustesPendentes.some(
       (a) => a.data_ponto === row.data && a.tipo_ponto === field,
@@ -403,6 +437,7 @@ export default function EspelhoPonto() {
 
   const renderMobileCell = (row: any, field: string, label: string) => {
     const value = row[field]
+    const isManual = manualPointsMap[row.data]?.[field]
     const hasPending = ajustesPendentes.some(
       (a) => a.data_ponto === row.data && a.tipo_ponto === field,
     )
@@ -410,7 +445,7 @@ export default function EspelhoPonto() {
     return (
       <div>
         <span className="text-muted-foreground block text-xs">{label}</span>
-        <span className="font-medium flex items-center gap-2">
+        <span className={`font-medium flex items-center gap-2 ${isManual ? 'text-blue-600' : ''}`}>
           {value || '--:--'}
           {!value && !hasPending && (
             <button
