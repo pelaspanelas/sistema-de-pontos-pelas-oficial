@@ -534,10 +534,10 @@ export default function EspelhoPonto() {
                   <TableHeader className="bg-muted/50">
                     <TableRow>
                       <TableHead className="w-[120px]">Data</TableHead>
-                      <TableHead>Entrada 1</TableHead>
-                      <TableHead>Saída 1</TableHead>
-                      <TableHead>Entrada 2</TableHead>
-                      <TableHead>Saída 2</TableHead>
+                      <TableHead>Entrada</TableHead>
+                      <TableHead>Almoço</TableHead>
+                      <TableHead>Retorno</TableHead>
+                      <TableHead>Saída</TableHead>
                       <TableHead>Total Hrs</TableHead>
                       <TableHead className="text-right">Saldo Acumulado</TableHead>
                     </TableRow>
