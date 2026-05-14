@@ -13,27 +13,28 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { EMPLOYEES, Task } from './types'
+import { Task, Employee } from './types'
 
 interface TaskFormProps {
   initialData?: Task | null
-  onSubmit: (data: Omit<Task, 'id' | 'responsibleName'>) => Promise<void>
+  employees: Employee[]
+  onSubmit: (data: any) => Promise<void>
   onCancel: () => void
   isLoading: boolean
 }
 
-export function TaskForm({ initialData, onSubmit, onCancel, isLoading }: TaskFormProps) {
+export function TaskForm({ initialData, employees, onSubmit, onCancel, isLoading }: TaskFormProps) {
   const [formData, setFormData] = useState({
-    title: initialData?.title || '',
-    description: initialData?.description || '',
-    date: initialData?.date || '',
-    dueDate: initialData?.dueDate || '',
-    responsibleId: initialData?.responsibleId || '',
-    quantity: initialData?.quantity || '',
-    priority: initialData?.priority || '2',
-    repetition: initialData?.repetition || 'Sem repetição',
-    repetitionDays: initialData?.repetitionDays || [],
-    repetitionMonthDay: initialData?.repetitionMonthDay || '',
+    titulo: initialData?.titulo || '',
+    descricao: initialData?.descricao || '',
+    data: initialData?.data || '',
+    data_vencimento: initialData?.data_vencimento || '',
+    responsavel_id: initialData?.responsavel_id || '',
+    quantidade_meta: initialData?.quantidade_meta || '',
+    prioridade: initialData?.prioridade?.toString() || '2',
+    tipo_repeticao: initialData?.tipo_repeticao || 'nenhuma',
+    dias_semana: initialData?.dias_semana || ([] as number[]),
+    dia_mes: initialData?.dia_mes?.toString() || '',
   })
   const [error, setError] = useState('')
 
@@ -42,24 +43,46 @@ export function TaskForm({ initialData, onSubmit, onCancel, isLoading }: TaskFor
     setError('')
 
     if (
-      !formData.title ||
-      !formData.date ||
-      !formData.responsibleId ||
-      !formData.quantity ||
-      !formData.priority
+      !formData.titulo ||
+      !formData.data ||
+      !formData.responsavel_id ||
+      !formData.quantidade_meta ||
+      !formData.prioridade
     ) {
       return setError('Preencha todos os campos obrigatórios.')
     }
 
     const today = startOfDay(new Date())
-    if (isBefore(parseISO(formData.date), today) && !initialData) {
+    if (isBefore(parseISO(formData.data), today) && !initialData) {
       return setError('A data não pode ser no passado.')
     }
 
-    await onSubmit(formData as any)
+    const payload = {
+      titulo: formData.titulo,
+      descricao: formData.descricao || null,
+      data: formData.data,
+      data_vencimento: formData.data_vencimento || null,
+      responsavel_id: formData.responsavel_id,
+      quantidade_meta: formData.quantidade_meta,
+      prioridade: parseInt(formData.prioridade, 10),
+      tipo_repeticao: formData.tipo_repeticao,
+      dias_semana: formData.tipo_repeticao === 'semanal' ? formData.dias_semana : null,
+      dia_mes: formData.tipo_repeticao === 'mensal' ? parseInt(formData.dia_mes, 10) : null,
+      ativo: true,
+    }
+
+    await onSubmit(payload)
   }
 
-  const WEEK_DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+  const WEEK_DAYS = [
+    { value: 0, label: 'Domingo' },
+    { value: 1, label: 'Segunda' },
+    { value: 2, label: 'Terça' },
+    { value: 3, label: 'Quarta' },
+    { value: 4, label: 'Quinta' },
+    { value: 5, label: 'Sexta' },
+    { value: 6, label: 'Sábado' },
+  ]
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -68,23 +91,23 @@ export function TaskForm({ initialData, onSubmit, onCancel, isLoading }: TaskFor
         <div className="space-y-2">
           <Label>Título *</Label>
           <Input
-            value={formData.title}
-            onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
+            value={formData.titulo}
+            onChange={(e) => setFormData((f) => ({ ...f, titulo: e.target.value }))}
             disabled={isLoading}
           />
         </div>
         <div className="space-y-2">
           <Label>Responsável *</Label>
           <Select
-            value={formData.responsibleId}
-            onValueChange={(v) => setFormData((f) => ({ ...f, responsibleId: v }))}
+            value={formData.responsavel_id}
+            onValueChange={(v) => setFormData((f) => ({ ...f, responsavel_id: v }))}
             disabled={isLoading}
           >
             <SelectTrigger>
               <SelectValue placeholder="Selecione..." />
             </SelectTrigger>
             <SelectContent>
-              {EMPLOYEES.map((e) => (
+              {employees.map((e) => (
                 <SelectItem key={e.id} value={e.id}>
                   {e.name}
                 </SelectItem>
@@ -96,8 +119,8 @@ export function TaskForm({ initialData, onSubmit, onCancel, isLoading }: TaskFor
       <div className="space-y-2">
         <Label>Descrição</Label>
         <Textarea
-          value={formData.description}
-          onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
+          value={formData.descricao}
+          onChange={(e) => setFormData((f) => ({ ...f, descricao: e.target.value }))}
           disabled={isLoading}
         />
       </div>
@@ -106,8 +129,8 @@ export function TaskForm({ initialData, onSubmit, onCancel, isLoading }: TaskFor
           <Label>Data *</Label>
           <Input
             type="date"
-            value={formData.date}
-            onChange={(e) => setFormData((f) => ({ ...f, date: e.target.value }))}
+            value={formData.data}
+            onChange={(e) => setFormData((f) => ({ ...f, data: e.target.value }))}
             disabled={isLoading}
           />
         </div>
@@ -115,8 +138,8 @@ export function TaskForm({ initialData, onSubmit, onCancel, isLoading }: TaskFor
           <Label>Vencimento</Label>
           <Input
             type="date"
-            value={formData.dueDate}
-            onChange={(e) => setFormData((f) => ({ ...f, dueDate: e.target.value }))}
+            value={formData.data_vencimento}
+            onChange={(e) => setFormData((f) => ({ ...f, data_vencimento: e.target.value }))}
             disabled={isLoading}
           />
         </div>
@@ -125,16 +148,16 @@ export function TaskForm({ initialData, onSubmit, onCancel, isLoading }: TaskFor
         <div className="space-y-2">
           <Label>Quantidade/Meta *</Label>
           <Input
-            value={formData.quantity}
-            onChange={(e) => setFormData((f) => ({ ...f, quantity: e.target.value }))}
+            value={formData.quantidade_meta}
+            onChange={(e) => setFormData((f) => ({ ...f, quantidade_meta: e.target.value }))}
             disabled={isLoading}
           />
         </div>
         <div className="space-y-2">
           <Label>Prioridade *</Label>
           <RadioGroup
-            value={formData.priority}
-            onValueChange={(v) => setFormData((f) => ({ ...f, priority: v }))}
+            value={formData.prioridade}
+            onValueChange={(v) => setFormData((f) => ({ ...f, prioridade: v }))}
             className="flex space-x-4 mt-2"
             disabled={isLoading}
           >
@@ -156,13 +179,13 @@ export function TaskForm({ initialData, onSubmit, onCancel, isLoading }: TaskFor
       <div className="space-y-2">
         <Label>Repetição</Label>
         <Select
-          value={formData.repetition}
+          value={formData.tipo_repeticao}
           onValueChange={(v) =>
             setFormData((f) => ({
               ...f,
-              repetition: v,
-              repetitionDays: [],
-              repetitionMonthDay: '',
+              tipo_repeticao: v,
+              dias_semana: [],
+              dia_mes: '',
             }))
           }
           disabled={isLoading}
@@ -171,45 +194,50 @@ export function TaskForm({ initialData, onSubmit, onCancel, isLoading }: TaskFor
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {['Sem repetição', 'Diária', 'Semanal', 'Mensal'].map((r) => (
-              <SelectItem key={r} value={r}>
-                {r}
+            {[
+              { value: 'nenhuma', label: 'Sem repetição' },
+              { value: 'diaria', label: 'Diária' },
+              { value: 'semanal', label: 'Semanal' },
+              { value: 'mensal', label: 'Mensal' },
+            ].map((r) => (
+              <SelectItem key={r.value} value={r.value}>
+                {r.label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
-      {formData.repetition === 'Semanal' && (
+      {formData.tipo_repeticao === 'semanal' && (
         <div className="grid grid-cols-4 gap-2">
           {WEEK_DAYS.map((day) => (
-            <div key={day} className="flex items-center space-x-2">
+            <div key={day.value} className="flex items-center space-x-2">
               <Checkbox
-                id={`day-${day}`}
-                checked={formData.repetitionDays.includes(day)}
+                id={`day-${day.value}`}
+                checked={formData.dias_semana.includes(day.value)}
                 onCheckedChange={(checked) => {
                   setFormData((f) => ({
                     ...f,
-                    repetitionDays: checked
-                      ? [...f.repetitionDays, day]
-                      : f.repetitionDays.filter((d) => d !== day),
+                    dias_semana: checked
+                      ? [...f.dias_semana, day.value]
+                      : f.dias_semana.filter((d) => d !== day.value),
                   }))
                 }}
                 disabled={isLoading}
               />
-              <Label htmlFor={`day-${day}`}>{day}</Label>
+              <Label htmlFor={`day-${day.value}`}>{day.label}</Label>
             </div>
           ))}
         </div>
       )}
-      {formData.repetition === 'Mensal' && (
+      {formData.tipo_repeticao === 'mensal' && (
         <div className="space-y-2">
           <Label>Dia do Mês</Label>
           <Input
             type="number"
             min="1"
             max="31"
-            value={formData.repetitionMonthDay}
-            onChange={(e) => setFormData((f) => ({ ...f, repetitionMonthDay: e.target.value }))}
+            value={formData.dia_mes}
+            onChange={(e) => setFormData((f) => ({ ...f, dia_mes: e.target.value }))}
             disabled={isLoading}
           />
         </div>

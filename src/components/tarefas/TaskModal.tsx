@@ -3,17 +3,25 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TaskForm } from './TaskForm'
 import { InformativoForm } from './InformativoForm'
-import { Task, EMPLOYEES } from './types'
+import { Task, Employee } from './types'
 import { useToast } from '@/hooks/use-toast'
+import { createTarefa, updateTarefa, createInformativo } from '@/services/tarefas'
 
 interface TaskModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   taskToEdit?: Task | null
-  onSaveTask: (task: Task) => void
+  employees: Employee[]
+  onSuccess: () => void
 }
 
-export function TaskModal({ open, onOpenChange, taskToEdit, onSaveTask }: TaskModalProps) {
+export function TaskModal({
+  open,
+  onOpenChange,
+  taskToEdit,
+  employees,
+  onSuccess,
+}: TaskModalProps) {
   const [tab, setTab] = useState('tarefa')
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
@@ -27,21 +35,19 @@ export function TaskModal({ open, onOpenChange, taskToEdit, onSaveTask }: TaskMo
   const handleSaveTask = async (data: any) => {
     setIsLoading(true)
     try {
-      // Mock network request
-      await new Promise((resolve) => setTimeout(resolve, 600))
-
-      const responsibleName = EMPLOYEES.find((e) => e.id === data.responsibleId)?.name || ''
-      const newTask: Task = {
-        ...data,
-        id: taskToEdit?.id || Math.random().toString(36).substring(7),
-        responsibleName,
+      if (taskToEdit) {
+        const { error } = await updateTarefa(taskToEdit.id, data)
+        if (error) throw error
+        toast({ title: 'Tarefa atualizada com sucesso' })
+      } else {
+        const { error } = await createTarefa(data)
+        if (error) throw error
+        toast({ title: 'Tarefa criada com sucesso' })
       }
-
-      onSaveTask(newTask)
-      toast({ title: taskToEdit ? 'Tarefa atualizada com sucesso' : 'Tarefa criada com sucesso' })
+      onSuccess()
       onOpenChange(false)
-    } catch (error) {
-      toast({ title: 'Erro ao salvar', variant: 'destructive' })
+    } catch (error: any) {
+      toast({ title: 'Erro ao salvar tarefa', description: error.message, variant: 'destructive' })
     } finally {
       setIsLoading(false)
     }
@@ -50,13 +56,17 @@ export function TaskModal({ open, onOpenChange, taskToEdit, onSaveTask }: TaskMo
   const handleSaveInformativo = async (data: any) => {
     setIsLoading(true)
     try {
-      // Mock network request
-      await new Promise((resolve) => setTimeout(resolve, 600))
-
+      const { error } = await createInformativo(data)
+      if (error) throw error
       toast({ title: 'Informativo enviado com sucesso' })
+      onSuccess()
       onOpenChange(false)
-    } catch (error) {
-      toast({ title: 'Erro ao enviar', variant: 'destructive' })
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao enviar informativo',
+        description: error.message,
+        variant: 'destructive',
+      })
     } finally {
       setIsLoading(false)
     }
@@ -81,6 +91,7 @@ export function TaskModal({ open, onOpenChange, taskToEdit, onSaveTask }: TaskMo
             </TabsList>
             <TabsContent value="tarefa" className="mt-4">
               <TaskForm
+                employees={employees}
                 onSubmit={handleSaveTask}
                 onCancel={() => onOpenChange(false)}
                 isLoading={isLoading}
@@ -88,6 +99,7 @@ export function TaskModal({ open, onOpenChange, taskToEdit, onSaveTask }: TaskMo
             </TabsContent>
             <TabsContent value="informativo" className="mt-4">
               <InformativoForm
+                employees={employees}
                 onSubmit={handleSaveInformativo}
                 onCancel={() => onOpenChange(false)}
                 isLoading={isLoading}
@@ -98,6 +110,7 @@ export function TaskModal({ open, onOpenChange, taskToEdit, onSaveTask }: TaskMo
           <div className="mt-4">
             <TaskForm
               initialData={taskToEdit}
+              employees={employees}
               onSubmit={handleSaveTask}
               onCancel={() => onOpenChange(false)}
               isLoading={isLoading}

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, CalendarIcon } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
@@ -23,7 +23,7 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 
 import { TaskModal } from '@/components/tarefas/TaskModal'
-import { INITIAL_TASKS, Task, PRIORITIES } from '@/components/tarefas/types'
+import { Task, PRIORITIES, Employee } from '@/components/tarefas/types'
 import {
   Dialog,
   DialogContent,
@@ -31,6 +31,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { getTarefas, deleteTarefa, getFuncionarios } from '@/services/tarefas'
 
 const MONTHS = [
   { value: '2026-04', label: 'Abril 2026' },
@@ -39,8 +40,10 @@ const MONTHS = [
 ]
 
 export default function TarefasPage() {
-  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS)
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([])
   const [selectedMonth, setSelectedMonth] = useState('2026-05')
+  const [isLoading, setIsLoading] = useState(true)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
@@ -51,9 +54,29 @@ export default function TarefasPage() {
 
   const { toast } = useToast()
 
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((t) => t.date.startsWith(selectedMonth))
-  }, [tasks, selectedMonth])
+  const loadData = async () => {
+    setIsLoading(true)
+    try {
+      const [tarefasRes, funcRes] = await Promise.all([
+        getTarefas(selectedMonth),
+        getFuncionarios(),
+      ])
+
+      if (tarefasRes.error) throw tarefasRes.error
+      if (funcRes.error) throw funcRes.error
+
+      setTasks(tarefasRes.data || [])
+      setEmployees(funcRes.data || [])
+    } catch (error: any) {
+      toast({ title: 'Erro ao carregar dados', description: error.message, variant: 'destructive' })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [selectedMonth])
 
   const handleOpenNew = () => {
     setEditingTask(null)
@@ -65,28 +88,32 @@ export default function TarefasPage() {
     setIsModalOpen(true)
   }
 
-  const handleSaveTask = (newTask: Task) => {
-    if (editingTask) {
-      setTasks((prev) => prev.map((t) => (t.id === newTask.id ? newTask : t)))
-    } else {
-      setTasks((prev) => [...prev, newTask])
-    }
-  }
-
   const confirmDelete = async () => {
     if (!taskToDelete) return
     setIsDeleting(true)
     try {
-      await new Promise((r) => setTimeout(r, 600)) // mock API
+      const { error } = await deleteTarefa(taskToDelete)
+      if (error) throw error
+
       setTasks((prev) => prev.filter((t) => t.id !== taskToDelete))
       toast({ title: 'Tarefa removida com sucesso' })
       setDeleteModalOpen(false)
-    } catch {
-      toast({ title: 'Erro ao remover tarefa', variant: 'destructive' })
+    } catch (error: any) {
+      toast({ title: 'Erro ao remover tarefa', description: error.message, variant: 'destructive' })
     } finally {
       setIsDeleting(false)
       setTaskToDelete(null)
     }
+  }
+
+  const formatRepetition = (tipo: string) => {
+    const map: Record<string, string> = {
+      nenhuma: 'Sem repetição',
+      diaria: 'Diária',
+      semanal: 'Semanal',
+      mensal: 'Mensal',
+    }
+    return map[tipo] || tipo
   }
 
   return (
@@ -136,34 +163,42 @@ export default function TarefasPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTasks.length === 0 ? (
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      Carregando...
+                    </TableCell>
+                  </TableRow>
+                ) : tasks.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                       Nenhuma tarefa cadastrada neste mês
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredTasks.map((task) => (
+                  tasks.map((task) => (
                     <TableRow key={task.id}>
                       <TableCell className="font-medium">
                         <div className="flex items-center">
                           <CalendarIcon className="h-4 w-4 mr-2 text-muted-foreground" />
-                          {format(parseISO(task.date), 'dd/MM/yyyy')}
+                          {format(parseISO(task.data), 'dd/MM/yyyy')}
                         </div>
                       </TableCell>
-                      <TableCell>{task.responsibleName}</TableCell>
+                      <TableCell>{task.responsavel?.name}</TableCell>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span>{task.title}</span>
-                          {task.repetition !== 'Sem repetição' && (
-                            <span className="text-xs text-muted-foreground">{task.repetition}</span>
+                          <span>{task.titulo}</span>
+                          {task.tipo_repeticao !== 'nenhuma' && (
+                            <span className="text-xs text-muted-foreground">
+                              {formatRepetition(task.tipo_repeticao)}
+                            </span>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{task.quantity}</TableCell>
+                      <TableCell>{task.quantidade_meta}</TableCell>
                       <TableCell>
-                        <Badge className={PRIORITIES[task.priority]?.color} variant="outline">
-                          {PRIORITIES[task.priority]?.label}
+                        <Badge className={PRIORITIES[task.prioridade]?.color} variant="outline">
+                          {PRIORITIES[task.prioridade]?.label}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -203,7 +238,8 @@ export default function TarefasPage() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         taskToEdit={editingTask}
-        onSaveTask={handleSaveTask}
+        employees={employees}
+        onSuccess={loadData}
       />
 
       <Dialog open={deleteModalOpen} onOpenChange={(v) => !isDeleting && setDeleteModalOpen(v)}>
