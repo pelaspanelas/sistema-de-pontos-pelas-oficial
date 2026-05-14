@@ -101,6 +101,7 @@ export default function Desempenho() {
 
   const [month, setMonth] = useState(() => format(new Date(), 'yyyy-MM'))
   const [selectedUser, setSelectedUser] = useState<string>('todos')
+  const [dateFilter, setDateFilter] = useState<'ontem' | 'hoje' | 'amanha'>('hoje')
 
   const [funcionarios, setFuncionarios] = useState<Employee[]>([])
   const [tarefas, setTarefas] = useState<TarefaRow[]>([])
@@ -147,19 +148,23 @@ export default function Desempenho() {
     }
   }, [isManagerOrAdmin])
 
+  const getFilterDate = () => {
+    const d = new Date()
+    if (dateFilter === 'ontem') d.setDate(d.getDate() - 1)
+    if (dateFilter === 'amanha') d.setDate(d.getDate() + 1)
+    return format(d, 'yyyy-MM-dd')
+  }
+
   const fetchDados = async () => {
     if (!profile?.id) return
     setLoading(true)
     try {
-      const [yearStr, monthStr] = month.split('-')
-      const startDate = new Date(Number(yearStr), Number(monthStr) - 1, 1)
-      const endDate = new Date(Number(yearStr), Number(monthStr), 0)
+      const targetDateStr = getFilterDate()
 
       let query = supabase
         .from('tarefas')
         .select('*, responsavel:profiles!tarefas_responsavel_id_fkey(id, name)')
-        .gte('data', format(startDate, 'yyyy-MM-dd'))
-        .lte('data', format(endDate, 'yyyy-MM-dd'))
+        .eq('data', targetDateStr)
         .order('data', { ascending: true })
 
       if (!isManagerOrAdmin) {
@@ -188,8 +193,7 @@ export default function Desempenho() {
         .from('tarefas_concluidas')
         .select('*, responsavel:profiles!tarefas_concluidas_funcionario_id_fkey(id, name)')
         .is('tarefa_id', null)
-        .gte('data', format(startDate, 'yyyy-MM-dd'))
-        .lte('data', format(endDate, 'yyyy-MM-dd'))
+        .eq('data', targetDateStr)
 
       if (!isManagerOrAdmin) {
         queryLivre = queryLivre.eq('funcionario_id', profile.id)
@@ -264,7 +268,7 @@ export default function Desempenho() {
 
   useEffect(() => {
     fetchDados()
-  }, [month, selectedUser, profile?.id])
+  }, [month, selectedUser, profile?.id, dateFilter])
 
   const toggleStatus = async (tarefa: TarefaRow) => {
     const processingId = tarefa.isLivre ? tarefa.conclusao_id! : tarefa.id
@@ -326,6 +330,7 @@ export default function Desempenho() {
         data: livreData,
         data_conclusao: livreData,
         status: livreStatus,
+        criado_por: profile?.id,
       }
       // @ts-expect-error
       const { error: concError } = await supabase.from('tarefas_concluidas').insert(newConclusao)
@@ -427,11 +432,38 @@ export default function Desempenho() {
           <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle>Minhas Tarefas</CardTitle>
-              <CardDescription>Acompanhe suas atividades do mês</CardDescription>
+              <CardDescription>Acompanhe suas atividades do período</CardDescription>
             </div>
-            <Button onClick={() => setLivreModalOpen(true)} size="sm">
-              Adicionar Tarefa Livre
-            </Button>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <RadioGroup
+                value={dateFilter}
+                onValueChange={(val: any) => setDateFilter(val)}
+                className="flex space-x-2"
+                disabled={loading}
+              >
+                <div className="flex items-center space-x-1">
+                  <RadioGroupItem value="ontem" id="ontem" />
+                  <Label htmlFor="ontem" className="cursor-pointer">
+                    Ontem
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <RadioGroupItem value="hoje" id="hoje" />
+                  <Label htmlFor="hoje" className="cursor-pointer">
+                    Hoje
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <RadioGroupItem value="amanha" id="amanha" />
+                  <Label htmlFor="amanha" className="cursor-pointer">
+                    Amanhã
+                  </Label>
+                </div>
+              </RadioGroup>
+              <Button onClick={() => setLivreModalOpen(true)} size="sm">
+                Adicionar Tarefa Livre
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -445,7 +477,7 @@ export default function Desempenho() {
                 <div className="rounded-full bg-muted p-3">
                   <span className="text-xl">📋</span>
                 </div>
-                <p className="text-muted-foreground">Nenhuma tarefa para este mês</p>
+                <p className="text-muted-foreground">Nenhuma tarefa para este período</p>
               </div>
             ) : (
               <div className="overflow-x-auto">

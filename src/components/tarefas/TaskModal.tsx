@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useAuth } from '@/hooks/use-auth'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TaskForm } from './TaskForm'
 import { InformativoForm } from './InformativoForm'
@@ -25,6 +26,7 @@ export function TaskModal({
   const [tab, setTab] = useState('tarefa')
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
+  const { profile } = useAuth()
 
   useEffect(() => {
     if (open) {
@@ -40,7 +42,8 @@ export function TaskModal({
         if (error) throw error
         toast({ title: 'Tarefa atualizada com sucesso' })
       } else {
-        const { error } = await createTarefa(data)
+        const payload = { ...data, criado_por: profile?.id }
+        const { error } = await createTarefa(payload)
         if (error) throw error
         toast({ title: 'Tarefa criada com sucesso' })
       }
@@ -91,6 +94,7 @@ export function TaskModal({
             </TabsList>
             <TabsContent value="tarefa" className="mt-4">
               <TaskForm
+                key={`new-task-${open}`}
                 employees={employees}
                 onSubmit={handleSaveTask}
                 onCancel={() => onOpenChange(false)}
@@ -99,6 +103,7 @@ export function TaskModal({
             </TabsContent>
             <TabsContent value="informativo" className="mt-4">
               <InformativoForm
+                key={`new-inf-${open}`}
                 employees={employees}
                 onSubmit={handleSaveInformativo}
                 onCancel={() => onOpenChange(false)}
@@ -109,6 +114,7 @@ export function TaskModal({
         ) : (
           <div className="mt-4">
             <TaskForm
+              key={`edit-${taskToEdit.id}`}
               initialData={taskToEdit}
               employees={employees}
               onSubmit={handleSaveTask}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { startOfDay, parseISO, isBefore } from 'date-fns'
+import { format, startOfDay, parseISO, isBefore } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -27,7 +27,7 @@ export function TaskForm({ initialData, employees, onSubmit, onCancel, isLoading
   const [formData, setFormData] = useState({
     titulo: initialData?.titulo || '',
     descricao: initialData?.descricao || '',
-    data: initialData?.data || '',
+    data: initialData?.data || format(new Date(), 'yyyy-MM-dd'),
     data_vencimento: initialData?.data_vencimento || '',
     responsavel_id: initialData?.responsavel_id || '',
     quantidade_meta: initialData?.quantidade_meta || '',

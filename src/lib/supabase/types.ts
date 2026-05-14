@@ -69,6 +69,7 @@ export type Database = {
           criado_por: string | null
           destinatarios: string[] | null
           id: string
+          lido: boolean | null
           mensagem: string
           titulo: string
           updated_at: string
@@ -78,6 +79,7 @@ export type Database = {
           criado_por?: string | null
           destinatarios?: string[] | null
           id?: string
+          lido?: boolean | null
           mensagem: string
           titulo: string
           updated_at?: string
@@ -87,6 +89,7 @@ export type Database = {
           criado_por?: string | null
           destinatarios?: string[] | null
           id?: string
+          lido?: boolean | null
           mensagem?: string
           titulo?: string
           updated_at?: string
@@ -400,7 +403,9 @@ export type Database = {
       tarefas_concluidas: {
         Row: {
           created_at: string
+          data: string | null
           data_conclusao: string
+          descricao: string | null
           funcionario_id: string | null
           id: string
           status: string
@@ -408,7 +413,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          data?: string | null
           data_conclusao: string
+          descricao?: string | null
           funcionario_id?: string | null
           id?: string
           status?: string
@@ -416,7 +423,9 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          data?: string | null
           data_conclusao?: string
+          descricao?: string | null
           funcionario_id?: string | null
           id?: string
           status?: string
@@ -674,6 +683,7 @@ export const Constants = {
 //   criado_por: uuid (nullable)
 //   created_at: timestamp with time zone (not null, default: now())
 //   updated_at: timestamp with time zone (not null, default: now())
+//   lido: boolean (nullable, default: false)
 // Table: pontos
 //   id: uuid (not null, default: gen_random_uuid())
 //   nsr: integer (not null, default: nextval('pontos_nsr_seq'::regclass))
@@ -757,6 +767,8 @@ export const Constants = {
 //   data_conclusao: date (not null)
 //   status: text (not null, default: 'pendente'::text)
 //   created_at: timestamp with time zone (not null, default: now())
+//   descricao: text (nullable)
+//   data: date (nullable)
 
 // --- CONSTRAINTS ---
 // Table: ajuste_ponto
@@ -810,7 +822,8 @@ export const Constants = {
 //   Policy "informativos_select" (SELECT, PERMISSIVE) roles={authenticated}
 //     USING: true
 //   Policy "informativos_update" (UPDATE, PERMISSIVE) roles={authenticated}
-//     USING: is_manager_or_admin()
+//     USING: true
+//     WITH CHECK: true
 // Table: pontos
 //   Policy "pontos_delete" (DELETE, PERMISSIVE) roles={authenticated}
 //     USING: (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND (profiles.access_level = 'total'::text))))
@@ -857,6 +870,8 @@ export const Constants = {
 //   Policy "tarefas_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: is_manager_or_admin()
 // Table: tarefas_concluidas
+//   Policy "tarefas_concluidas_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: ((funcionario_id = auth.uid()) OR is_manager_or_admin())
 //   Policy "tarefas_concluidas_insert" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: ((funcionario_id = auth.uid()) OR is_manager_or_admin())
 //   Policy "tarefas_concluidas_select" (SELECT, PERMISSIVE) roles={authenticated}
