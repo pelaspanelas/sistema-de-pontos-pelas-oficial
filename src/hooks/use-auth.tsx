@@ -5,6 +5,8 @@ import { toast } from '@/hooks/use-toast'
 
 interface Profile {
   id: string
+  name: string
+  avatar_url: string | null
   access_level: string | null
   permissions: any
 }
@@ -17,6 +19,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: any }>
   signOut: () => Promise<{ error: any }>
   loading: boolean
+  refreshProfile: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -33,28 +36,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const loadProfile = async (userId: string) => {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, access_level, permissions')
-          .eq('id', userId)
-          .single()
+  const loadProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, name, avatar_url, access_level, permissions')
+        .eq('id', userId)
+        .single()
 
-        if (error) throw error
-        setProfile(data)
-      } catch (err) {
-        console.error(err)
-        toast({
-          title: 'Erro ao buscar permissões',
-          description: 'Não foi possível carregar as permissões do usuário.',
-          variant: 'destructive',
-        })
-        setProfile(null)
-      }
+      if (error) throw error
+      setProfile(data)
+    } catch (err) {
+      console.error(err)
+      toast({
+        title: 'Erro ao buscar perfil',
+        description: 'Não foi possível carregar os dados do usuário.',
+        variant: 'destructive',
+      })
+      setProfile(null)
     }
+  }
 
+  const refreshProfile = async () => {
+    if (user?.id) {
+      await loadProfile(user.id)
+    }
+  }
+
+  useEffect(() => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
@@ -101,7 +110,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, signUp, signIn, signOut, loading }}>
+    <AuthContext.Provider
+      value={{ user, session, profile, signUp, signIn, signOut, loading, refreshProfile }}
+    >
       {children}
     </AuthContext.Provider>
   )

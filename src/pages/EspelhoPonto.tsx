@@ -349,19 +349,17 @@ export default function EspelhoPonto() {
     let cumulative = 0
     const mapped = ascRecords.map((r) => {
       const dailyHours = r.horas_calculadas || 0
-      const dailyBalance = dailyHours > 0 ? dailyHours - 8 : 0
-      cumulative += dailyBalance
+      cumulative += dailyHours
       return {
         ...r,
-        saldo_dia: dailyBalance,
-        saldo_acumulado: cumulative,
+        horas_acumuladas_linha: cumulative,
       }
     })
     return mapped.reverse()
   }, [records])
 
-  const totalBalance = rowsWithBalance.length > 0 ? rowsWithBalance[0].saldo_acumulado : 0
-  const isPositive = totalBalance >= 0
+  const totalAccumulated =
+    rowsWithBalance.length > 0 ? rowsWithBalance[0].horas_acumuladas_linha : 0
 
   function openAjusteModal(data_ponto: string, tipo_ponto: string) {
     setAjusteData({ data_ponto, tipo_ponto })
@@ -524,21 +522,16 @@ export default function EspelhoPonto() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card
-          className="md:col-span-1 border-l-4 shadow-sm"
-          style={{ borderLeftColor: isPositive ? '#10b981' : '#ef4444' }}
-        >
+        <Card className="md:col-span-1 border-l-4 border-l-primary shadow-sm">
           <CardContent className="p-6 flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-sm font-medium text-muted-foreground">Saldo do Mês (Acumulado)</p>
-              <p
-                className={`text-3xl font-bold tracking-tighter ${isPositive ? 'text-emerald-600' : 'text-red-600'}`}
-              >
-                {formatDecimalBalance(totalBalance)}
+              <p className="text-sm font-medium text-muted-foreground">Horas Acumuladas (Mês)</p>
+              <p className="text-3xl font-bold tracking-tighter text-primary">
+                {formatDecimalHours(totalAccumulated)}
               </p>
             </div>
-            <div className={`p-3 rounded-full ${isPositive ? 'bg-emerald-100' : 'bg-red-100'}`}>
-              <Clock className={`h-6 w-6 ${isPositive ? 'text-emerald-600' : 'text-red-600'}`} />
+            <div className="p-3 rounded-full bg-primary/10">
+              <Clock className="h-6 w-6 text-primary" />
             </div>
           </CardContent>
         </Card>
@@ -574,7 +567,7 @@ export default function EspelhoPonto() {
                       <TableHead>Retorno</TableHead>
                       <TableHead>Saída</TableHead>
                       <TableHead>Total Hrs</TableHead>
-                      <TableHead className="text-right">Saldo Acumulado</TableHead>
+                      <TableHead className="text-right">Horas Acumuladas</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -590,12 +583,8 @@ export default function EspelhoPonto() {
                         <TableCell className={`font-medium ${getHoursColor(row.horas_calculadas)}`}>
                           {formatDecimalHours(row.horas_calculadas)}
                         </TableCell>
-                        <TableCell
-                          className={`text-right font-medium ${
-                            row.saldo_acumulado >= 0 ? 'text-emerald-600' : 'text-red-600'
-                          }`}
-                        >
-                          {formatDecimalBalance(row.saldo_acumulado)}
+                        <TableCell className="text-right font-medium text-foreground">
+                          {formatDecimalHours(row.horas_acumuladas_linha)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -610,12 +599,8 @@ export default function EspelhoPonto() {
                       <span className="font-semibold">
                         {format(parseISO(row.data), 'dd/MM/yyyy')}
                       </span>
-                      <span
-                        className={`text-sm font-medium ${
-                          row.saldo_acumulado >= 0 ? 'text-emerald-600' : 'text-red-600'
-                        }`}
-                      >
-                        Saldo: {formatDecimalBalance(row.saldo_acumulado)}
+                      <span className="text-sm font-medium text-foreground">
+                        Acumulado: {formatDecimalHours(row.horas_acumuladas_linha)}
                       </span>
                     </div>
                     <CardContent className="p-4 grid grid-cols-2 gap-y-3 text-sm">
