@@ -29,9 +29,14 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Trash2, Loader2, StickyNote } from 'lucide-react'
 
 type Tarefa = {
   id: string
@@ -46,8 +51,13 @@ type Tarefa = {
 
 type Conclusao = {
   id: string
-  tarefa_id: string
+  tarefa_id: string | null
+  funcionario_id: string
   status: string
+  descricao?: string | null
+  data?: string | null
+  data_conclusao: string
+  responsavel?: { id: string; name: string } | null
 }
 
 type Informativo = {
@@ -56,11 +66,26 @@ type Informativo = {
   mensagem: string
   created_at: string
   destinatarios: string[] | null
+  lido?: boolean
 }
 
 type Employee = {
   id: string
   name: string
+}
+
+type TarefaRow = {
+  id: string
+  isLivre: boolean
+  titulo: string
+  descricao?: string
+  data: string
+  prioridade?: number
+  quantidade_meta: string
+  status: string
+  conclusao_id?: string
+  responsavel?: { id: string; name: string } | null
+  responsavel_id?: string | null
 }
 
 const PRIORITIES: Record<number, { label: string; color: string }> = {
@@ -78,8 +103,7 @@ export default function Desempenho() {
   const [selectedUser, setSelectedUser] = useState<string>('todos')
 
   const [funcionarios, setFuncionarios] = useState<Employee[]>([])
-  const [tarefas, setTarefas] = useState<Tarefa[]>([])
-  const [concluidas, setConcluidas] = useState<Conclusao[]>([])
+  const [tarefas, setTarefas] = useState<TarefaRow[]>([])
   const [informativos, setInformativos] = useState<Informativo[]>([])
 
   const [loading, setLoading] = useState(true)
@@ -87,7 +111,16 @@ export default function Desempenho() {
 
   const [livreModalOpen, setLivreModalOpen] = useState(false)
   const [livreDesc, setLivreDesc] = useState('')
+  const [livreData, setLivreData] = useState(() => format(new Date(), 'yyyy-MM-dd'))
+  const [livreStatus, setLivreStatus] = useState('pendente')
   const [adding, setAdding] = useState(false)
+
+  const [selectedInf, setSelectedInf] = useState<Informativo | null>(null)
+  const [readingInf, setReadingInf] = useState(false)
+
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [taskToDelete, setTaskToDelete] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const months = useMemo(() => {
     const result = []
@@ -140,25 +173,78 @@ export default function Desempenho() {
 
       const taskIds = tarefasData.map((t) => t.id)
       let concluidasData: Conclusao[] = []
+
       if (taskIds.length > 0) {
-        const { data: cData, error: cError } = await supabase
+        const { data: cData1, error: cError1 } = await supabase
           .from('tarefas_concluidas')
-          .select('id, tarefa_id, status')
+          .select('*')
           .in('tarefa_id', taskIds)
-        if (cError) throw cError
-        concluidasData = cData
+        if (cError1) throw cError1
+        if (cData1) concluidasData.push(...(cData1 as Conclusao[]))
       }
+
+      // @ts-expect-error
+      let queryLivre = supabase
+        .from('tarefas_concluidas')
+        .select('*, responsavel:profiles!tarefas_concluidas_funcionario_id_fkey(id, name)')
+        .is('tarefa_id', null)
+        .gte('data', format(startDate, 'yyyy-MM-dd'))
+        .lte('data', format(endDate, 'yyyy-MM-dd'))
+
+      if (!isManagerOrAdmin) {
+        queryLivre = queryLivre.eq('funcionario_id', profile.id)
+      } else if (selectedUser !== 'todos') {
+        queryLivre = queryLivre.eq('funcionario_id', selectedUser)
+      }
+
+      const { data: cData2, error: cError2 } = await queryLivre
+      if (cError2) throw cError2
+      if (cData2) concluidasData.push(...(cData2 as Conclusao[]))
+
+      const mixedTarefas: TarefaRow[] = [
+        ...tarefasData.map((t) => {
+          const conclusao = concluidasData.find((c) => c.tarefa_id === t.id)
+          return {
+            id: t.id,
+            isLivre: false,
+            titulo: t.titulo,
+            descricao: t.descricao || undefined,
+            data: t.data,
+            prioridade: t.prioridade,
+            quantidade_meta: t.quantidade_meta,
+            status: conclusao ? conclusao.status : 'pendente',
+            conclusao_id: conclusao?.id,
+            responsavel: t.responsavel,
+            responsavel_id: t.responsavel_id,
+          }
+        }),
+        ...concluidasData
+          .filter((c) => !c.tarefa_id)
+          .map((c) => ({
+            id: c.id,
+            isLivre: true,
+            titulo: 'Tarefa Livre',
+            descricao: c.descricao || undefined,
+            data: c.data || c.data_conclusao || format(new Date(), 'yyyy-MM-dd'),
+            prioridade: undefined,
+            quantidade_meta: '-',
+            status: c.status,
+            conclusao_id: c.id,
+            responsavel: c.responsavel,
+            responsavel_id: c.funcionario_id,
+          })),
+      ].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
+
+      setTarefas(mixedTarefas)
 
       const { data: informativosData, error: informativosError } = await supabase
         .from('informativos')
         .select('*')
+        .or('lido.eq.false,lido.is.null')
         .order('created_at', { ascending: false })
       if (informativosError) throw informativosError
 
-      setTarefas(tarefasData || [])
-      setConcluidas(concluidasData || [])
-
-      const filteredInformativos = informativosData.filter((inf) => {
+      const filteredInformativos = (informativosData || []).filter((inf) => {
         if (!inf.destinatarios || inf.destinatarios.length === 0) return true
         if (!isManagerOrAdmin) {
           return inf.destinatarios.includes(profile.id)
@@ -168,7 +254,7 @@ export default function Desempenho() {
         }
         return true
       })
-      setInformativos(filteredInformativos || [])
+      setInformativos(filteredInformativos as Informativo[])
     } catch (error) {
       toast({ title: 'Erro', description: 'Erro ao buscar dados', variant: 'destructive' })
     } finally {
@@ -180,17 +266,17 @@ export default function Desempenho() {
     fetchDados()
   }, [month, selectedUser, profile?.id])
 
-  const toggleStatus = async (tarefa: Tarefa) => {
-    setProcessing(tarefa.id)
-    const existing = concluidas.find((c) => c.tarefa_id === tarefa.id)
-    const newStatus = existing?.status === 'concluida' ? 'pendente' : 'concluida'
+  const toggleStatus = async (tarefa: TarefaRow) => {
+    const processingId = tarefa.isLivre ? tarefa.conclusao_id! : tarefa.id
+    setProcessing(processingId)
+    const newStatus = tarefa.status === 'concluida' ? 'pendente' : 'concluida'
 
     try {
-      if (existing) {
+      if (tarefa.conclusao_id) {
         const { error } = await supabase
           .from('tarefas_concluidas')
           .update({ status: newStatus })
-          .eq('id', existing.id)
+          .eq('id', tarefa.conclusao_id)
         if (error) throw error
       } else {
         const { error } = await supabase.from('tarefas_concluidas').insert({
@@ -211,44 +297,91 @@ export default function Desempenho() {
   }
 
   const handleAddTarefaLivre = async () => {
-    if (!livreDesc.trim()) return
+    if (!livreDesc.trim()) {
+      toast({ title: 'Erro', description: 'Preencha a descrição', variant: 'destructive' })
+      return
+    }
+    if (!livreData) {
+      toast({ title: 'Erro', description: 'Preencha a data', variant: 'destructive' })
+      return
+    }
+
+    const selectedDate = new Date(livreData + 'T00:00:00')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    if (selectedDate < today) {
+      toast({
+        title: 'Erro',
+        description: 'A data não pode ser no passado',
+        variant: 'destructive',
+      })
+      return
+    }
+
     setAdding(true)
     try {
-      const titulo = livreDesc.split('\n')[0].slice(0, 100) || 'Tarefa Livre'
-      const newTarefa = {
-        titulo,
-        descricao: livreDesc,
-        data: format(new Date(), 'yyyy-MM-dd'),
-        responsavel_id: profile?.id,
-        quantidade_meta: '1',
-        prioridade: 1,
-        tipo_repeticao: 'nenhuma',
-      }
-
-      const { data: taskData, error: taskError } = await supabase
-        .from('tarefas')
-        .insert(newTarefa)
-        .select()
-        .single()
-      if (taskError) throw taskError
-
       const newConclusao = {
-        tarefa_id: taskData.id,
         funcionario_id: profile?.id,
-        data_conclusao: format(new Date(), 'yyyy-MM-dd'),
-        status: 'pendente',
+        descricao: livreDesc,
+        data: livreData,
+        data_conclusao: livreData,
+        status: livreStatus,
       }
+      // @ts-expect-error
       const { error: concError } = await supabase.from('tarefas_concluidas').insert(newConclusao)
       if (concError) throw concError
 
       toast({ title: 'Sucesso', description: 'Tarefa adicionada com sucesso' })
       setLivreModalOpen(false)
       setLivreDesc('')
+      setLivreData(format(new Date(), 'yyyy-MM-dd'))
+      setLivreStatus('pendente')
       fetchDados()
     } catch (error) {
       toast({ title: 'Erro', description: 'Erro ao adicionar tarefa', variant: 'destructive' })
     } finally {
       setAdding(false)
+    }
+  }
+
+  const confirmDelete = (conclusaoId: string) => {
+    setTaskToDelete(conclusaoId)
+    setDeleteConfirmOpen(true)
+  }
+
+  const handleDelete = async () => {
+    if (!taskToDelete) return
+    setDeleting(true)
+    try {
+      const { error } = await supabase.from('tarefas_concluidas').delete().eq('id', taskToDelete)
+      if (error) throw error
+      toast({ title: 'Sucesso', description: 'Tarefa deletada' })
+      fetchDados()
+      setDeleteConfirmOpen(false)
+    } catch (e) {
+      toast({ title: 'Erro', description: 'Erro ao deletar tarefa', variant: 'destructive' })
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const handleReadInformativo = async () => {
+    if (!selectedInf) return
+    setReadingInf(true)
+    try {
+      // @ts-expect-error
+      const { error } = await supabase
+        .from('informativos')
+        .update({ lido: true })
+        .eq('id', selectedInf.id)
+      if (error) throw error
+      toast({ title: 'Sucesso', description: 'Informativo marcado como lido' })
+      setSelectedInf(null)
+      fetchDados()
+    } catch (e) {
+      toast({ title: 'Erro', description: 'Erro ao marcar como lido', variant: 'destructive' })
+    } finally {
+      setReadingInf(false)
     }
   }
 
@@ -320,6 +453,7 @@ export default function Desempenho() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Tarefa</TableHead>
+                      <TableHead>Data</TableHead>
                       {isManagerOrAdmin && selectedUser === 'todos' && (
                         <TableHead>Responsável</TableHead>
                       )}
@@ -331,41 +465,53 @@ export default function Desempenho() {
                   </TableHeader>
                   <TableBody>
                     {tarefas.map((t) => {
-                      const isConcluida = concluidas.some(
-                        (c) => c.tarefa_id === t.id && c.status === 'concluida',
-                      )
-                      const prio = PRIORITIES[t.prioridade] || PRIORITIES[1]
+                      const isConcluida = t.status === 'concluida'
+                      const prio = t.prioridade ? PRIORITIES[t.prioridade] : null
+                      const rowKey = t.isLivre ? t.conclusao_id! : t.id
+
                       return (
-                        <TableRow key={t.id}>
+                        <TableRow key={rowKey}>
                           <TableCell className="font-medium min-w-[200px]">
-                            <div className="flex flex-col space-y-1">
-                              <span>{t.titulo}</span>
-                              {t.descricao && (
-                                <span className="text-xs text-muted-foreground line-clamp-2">
-                                  {t.descricao}
-                                </span>
+                            <div className="flex items-start space-x-2">
+                              {t.isLivre && (
+                                <StickyNote className="h-4 w-4 mt-1 text-muted-foreground shrink-0" />
                               )}
+                              <div className="flex flex-col space-y-1">
+                                <span>{t.titulo}</span>
+                                {t.descricao && (
+                                  <span className="text-xs text-muted-foreground line-clamp-2">
+                                    {t.descricao}
+                                  </span>
+                                )}
+                              </div>
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            {format(new Date(t.data + 'T00:00:00'), 'dd/MM/yyyy')}
                           </TableCell>
                           {isManagerOrAdmin && selectedUser === 'todos' && (
                             <TableCell>{t.responsavel?.name || '-'}</TableCell>
                           )}
                           <TableCell>{t.quantidade_meta}</TableCell>
                           <TableCell>
-                            <Badge variant="secondary" className={prio.color}>
-                              {prio.label}
-                            </Badge>
+                            {prio ? (
+                              <Badge variant="secondary" className={prio.color}>
+                                {prio.label}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">--</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center space-x-2">
                               <Checkbox
-                                id={`task-${t.id}`}
+                                id={`task-${rowKey}`}
                                 checked={isConcluida}
-                                disabled={processing === t.id}
+                                disabled={processing === rowKey}
                                 onCheckedChange={() => toggleStatus(t)}
                               />
                               <label
-                                htmlFor={`task-${t.id}`}
+                                htmlFor={`task-${rowKey}`}
                                 className="text-sm font-medium leading-none cursor-pointer"
                               >
                                 {isConcluida ? 'Concluída' : 'Pendente'}
@@ -373,9 +519,21 @@ export default function Desempenho() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" disabled>
-                              -
-                            </Button>
+                            {t.isLivre ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                onClick={() => confirmDelete(t.conclusao_id!)}
+                                disabled={processing === rowKey}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <Button variant="ghost" size="sm" disabled>
+                                -
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       )
@@ -410,7 +568,8 @@ export default function Desempenho() {
                 {informativos.map((inf) => (
                   <div
                     key={inf.id}
-                    className="p-4 border rounded-xl bg-card text-card-foreground shadow-sm transition-all hover:shadow-md"
+                    onClick={() => setSelectedInf(inf)}
+                    className="p-4 border rounded-xl bg-card text-card-foreground shadow-sm transition-all hover:shadow-md hover:border-primary/50 cursor-pointer"
                   >
                     <div className="flex justify-between items-start mb-3 gap-2">
                       <h4 className="font-semibold text-sm leading-tight">{inf.titulo}</h4>
@@ -418,7 +577,7 @@ export default function Desempenho() {
                         {format(new Date(inf.created_at), 'dd/MM/yyyy')}
                       </span>
                     </div>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                    <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
                       {inf.mensagem}
                     </p>
                   </div>
@@ -434,23 +593,107 @@ export default function Desempenho() {
           <DialogHeader>
             <DialogTitle>Adicionar Tarefa Livre</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
-            <Textarea
-              placeholder="Descreva a tarefa detalhadamente..."
-              value={livreDesc}
-              onChange={(e) => setLivreDesc(e.target.value)}
-              rows={4}
-              className="resize-none"
-            />
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label>Descrição</Label>
+              <Textarea
+                placeholder="Descreva a tarefa detalhadamente..."
+                value={livreDesc}
+                onChange={(e) => setLivreDesc(e.target.value)}
+                rows={4}
+                className="resize-none"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Data</Label>
+              <Input type="date" value={livreData} onChange={(e) => setLivreData(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <RadioGroup
+                value={livreStatus}
+                onValueChange={setLivreStatus}
+                className="flex space-x-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="pendente" id="r1" />
+                  <Label htmlFor="r1">Pendente</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="concluida" id="r2" />
+                  <Label htmlFor="r2">Concluída</Label>
+                </div>
+              </RadioGroup>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setLivreModalOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleAddTarefaLivre} disabled={!livreDesc.trim() || adding}>
-              {adding ? 'Adicionando...' : 'Adicionar'}
+            <Button onClick={handleAddTarefaLivre} disabled={adding}>
+              {adding && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Adicionar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Confirmar Exclusão</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              Deseja deletar esta tarefa livre? Esta ação não pode ser desfeita.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmOpen(false)}
+              disabled={deleting}
+            >
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Deletar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedInf} onOpenChange={(open) => !open && setSelectedInf(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          {selectedInf && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedInf.titulo}</DialogTitle>
+                <DialogDescription>
+                  Enviado em {format(new Date(selectedInf.created_at), 'dd/MM/yyyy')}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4">
+                <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                  {selectedInf.mensagem}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedInf(null)}
+                  disabled={readingInf}
+                >
+                  Fechar
+                </Button>
+                <Button onClick={handleReadInformativo} disabled={readingInf}>
+                  {readingInf && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Marcar como Lido
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
