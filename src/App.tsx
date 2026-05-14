@@ -12,6 +12,7 @@ import EspelhoPonto from './pages/EspelhoPonto'
 import Colaboradores from './pages/Colaboradores'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
+import Tarefas from './pages/Tarefas'
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth()
@@ -117,7 +118,7 @@ const App = () => (
               path="/tarefas"
               element={
                 <PermissionGuard permission="cadastros">
-                  <Navigate to="/colaboradores" replace />
+                  <Tarefas />
                 </PermissionGuard>
               }
             />
