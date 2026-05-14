@@ -63,6 +63,36 @@ export type Database = {
           },
         ]
       }
+      informativos: {
+        Row: {
+          created_at: string
+          criado_por: string | null
+          destinatarios: string[] | null
+          id: string
+          mensagem: string
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          criado_por?: string | null
+          destinatarios?: string[] | null
+          id?: string
+          mensagem: string
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          criado_por?: string | null
+          destinatarios?: string[] | null
+          id?: string
+          mensagem?: string
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pontos: {
         Row: {
           created_at: string
@@ -305,6 +335,110 @@ export type Database = {
           },
         ]
       }
+      tarefas: {
+        Row: {
+          ativo: boolean | null
+          created_at: string
+          criado_por: string | null
+          data: string
+          data_vencimento: string | null
+          descricao: string | null
+          dia_mes: number | null
+          dias_semana: number[] | null
+          id: string
+          prioridade: number
+          quantidade_meta: string
+          responsavel_id: string | null
+          tipo_repeticao: string
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string
+          criado_por?: string | null
+          data: string
+          data_vencimento?: string | null
+          descricao?: string | null
+          dia_mes?: number | null
+          dias_semana?: number[] | null
+          id?: string
+          prioridade: number
+          quantidade_meta: string
+          responsavel_id?: string | null
+          tipo_repeticao?: string
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string
+          criado_por?: string | null
+          data?: string
+          data_vencimento?: string | null
+          descricao?: string | null
+          dia_mes?: number | null
+          dias_semana?: number[] | null
+          id?: string
+          prioridade?: number
+          quantidade_meta?: string
+          responsavel_id?: string | null
+          tipo_repeticao?: string
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'tarefas_responsavel_id_fkey'
+            columns: ['responsavel_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      tarefas_concluidas: {
+        Row: {
+          created_at: string
+          data_conclusao: string
+          funcionario_id: string | null
+          id: string
+          status: string
+          tarefa_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          data_conclusao: string
+          funcionario_id?: string | null
+          id?: string
+          status?: string
+          tarefa_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          data_conclusao?: string
+          funcionario_id?: string | null
+          id?: string
+          status?: string
+          tarefa_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'tarefas_concluidas_funcionario_id_fkey'
+            columns: ['funcionario_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'tarefas_concluidas_tarefa_id_fkey'
+            columns: ['tarefa_id']
+            isOneToOne: false
+            referencedRelation: 'tarefas'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -532,6 +666,14 @@ export const Constants = {
 //   created_at: timestamp with time zone (nullable, default: now())
 //   updated_at: timestamp with time zone (nullable, default: now())
 //   tipo_ponto: text (nullable)
+// Table: informativos
+//   id: uuid (not null, default: gen_random_uuid())
+//   titulo: text (not null)
+//   mensagem: text (not null)
+//   destinatarios: _uuid (nullable)
+//   criado_por: uuid (nullable)
+//   created_at: timestamp with time zone (not null, default: now())
+//   updated_at: timestamp with time zone (not null, default: now())
 // Table: pontos
 //   id: uuid (not null, default: gen_random_uuid())
 //   nsr: integer (not null, default: nextval('pontos_nsr_seq'::regclass))
@@ -592,12 +734,38 @@ export const Constants = {
 //   lunch_start: time without time zone (nullable)
 //   lunch_end: time without time zone (nullable)
 //   exit_time: time without time zone (nullable)
+// Table: tarefas
+//   id: uuid (not null, default: gen_random_uuid())
+//   titulo: text (not null)
+//   descricao: text (nullable)
+//   data: date (not null)
+//   responsavel_id: uuid (nullable)
+//   quantidade_meta: text (not null)
+//   prioridade: integer (not null)
+//   data_vencimento: date (nullable)
+//   tipo_repeticao: text (not null, default: 'nenhuma'::text)
+//   dias_semana: _int4 (nullable)
+//   dia_mes: integer (nullable)
+//   ativo: boolean (nullable, default: true)
+//   criado_por: uuid (nullable)
+//   created_at: timestamp with time zone (not null, default: now())
+//   updated_at: timestamp with time zone (not null, default: now())
+// Table: tarefas_concluidas
+//   id: uuid (not null, default: gen_random_uuid())
+//   tarefa_id: uuid (nullable)
+//   funcionario_id: uuid (nullable)
+//   data_conclusao: date (not null)
+//   status: text (not null, default: 'pendente'::text)
+//   created_at: timestamp with time zone (not null, default: now())
 
 // --- CONSTRAINTS ---
 // Table: ajuste_ponto
 //   FOREIGN KEY ajuste_ponto_aprovado_por_fkey: FOREIGN KEY (aprovado_por) REFERENCES profiles(id) ON DELETE CASCADE
 //   PRIMARY KEY ajuste_ponto_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY ajuste_ponto_usuario_id_fkey: FOREIGN KEY (usuario_id) REFERENCES profiles(id) ON DELETE CASCADE
+// Table: informativos
+//   FOREIGN KEY informativos_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES auth.users(id) ON DELETE SET NULL
+//   PRIMARY KEY informativos_pkey: PRIMARY KEY (id)
 // Table: pontos
 //   FOREIGN KEY pontos_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES profiles(id) ON DELETE CASCADE
 //   UNIQUE pontos_nsr_key: UNIQUE (nsr)
@@ -614,6 +782,15 @@ export const Constants = {
 //   PRIMARY KEY schedules_pkey: PRIMARY KEY (id)
 //   UNIQUE schedules_profile_id_day_of_week_key: UNIQUE (profile_id, day_of_week)
 //   FOREIGN KEY schedules_profile_id_fkey: FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+// Table: tarefas
+//   FOREIGN KEY tarefas_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES auth.users(id) ON DELETE SET NULL
+//   PRIMARY KEY tarefas_pkey: PRIMARY KEY (id)
+//   CHECK tarefas_prioridade_check: CHECK ((prioridade = ANY (ARRAY[1, 2, 3])))
+//   FOREIGN KEY tarefas_responsavel_id_fkey: FOREIGN KEY (responsavel_id) REFERENCES profiles(id) ON DELETE CASCADE
+// Table: tarefas_concluidas
+//   FOREIGN KEY tarefas_concluidas_funcionario_id_fkey: FOREIGN KEY (funcionario_id) REFERENCES profiles(id) ON DELETE CASCADE
+//   PRIMARY KEY tarefas_concluidas_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY tarefas_concluidas_tarefa_id_fkey: FOREIGN KEY (tarefa_id) REFERENCES tarefas(id) ON DELETE CASCADE
 
 // --- ROW LEVEL SECURITY POLICIES ---
 // Table: ajuste_ponto
@@ -624,6 +801,15 @@ export const Constants = {
 //   Policy "ajuste_ponto_select" (SELECT, PERMISSIVE) roles={authenticated}
 //     USING: ((usuario_id = auth.uid()) OR is_manager_or_admin())
 //   Policy "ajuste_ponto_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
+// Table: informativos
+//   Policy "informativos_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
+//   Policy "informativos_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: is_manager_or_admin()
+//   Policy "informativos_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: true
+//   Policy "informativos_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: is_manager_or_admin()
 // Table: pontos
 //   Policy "pontos_delete" (DELETE, PERMISSIVE) roles={authenticated}
@@ -661,6 +847,22 @@ export const Constants = {
 //     USING: true
 //   Policy "schedules_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: true
+// Table: tarefas
+//   Policy "tarefas_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
+//   Policy "tarefas_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: is_manager_or_admin()
+//   Policy "tarefas_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: true
+//   Policy "tarefas_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
+// Table: tarefas_concluidas
+//   Policy "tarefas_concluidas_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: ((funcionario_id = auth.uid()) OR is_manager_or_admin())
+//   Policy "tarefas_concluidas_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: true
+//   Policy "tarefas_concluidas_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: ((funcionario_id = auth.uid()) OR is_manager_or_admin())
 
 // --- DATABASE FUNCTIONS ---
 // FUNCTION create_user_account(text, text, text, text, date, text, text, text, text, text, text, text, text, text, date, numeric, jsonb)

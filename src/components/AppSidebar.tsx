@@ -102,9 +102,9 @@ export function AppSidebar() {
   if (isAdmin || permissions.dashboard_principal) {
     dashboardItems.push({ name: 'Principal', path: '/', icon: LayoutDashboard })
   }
-  if (isAdmin || permissions.dashboard_desempenho) {
-    dashboardItems.push({ name: 'Desempenho', path: '/desempenho', icon: BarChart2 })
-  }
+  // Desempenho é acessível a todos os colaboradores
+  dashboardItems.push({ name: 'Desempenho', path: '/desempenho', icon: BarChart2 })
+
   if (dashboardItems.length > 0) {
     filteredNavItems.push({ label: 'DASHBOARD', items: dashboardItems })
   }

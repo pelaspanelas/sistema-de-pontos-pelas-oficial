@@ -13,6 +13,7 @@ import Colaboradores from './pages/Colaboradores'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 import Tarefas from './pages/Tarefas'
+import Desempenho from './pages/Desempenho'
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth()
@@ -97,15 +98,9 @@ const App = () => (
               }
             />
 
+            <Route path="/desempenho" element={<Desempenho />} />
+
             {/* Redirects for non-implemented routes mentioned in sidebar to keep UI functional */}
-            <Route
-              path="/desempenho"
-              element={
-                <PermissionGuard permission="dashboard_desempenho">
-                  <Navigate to="/" replace />
-                </PermissionGuard>
-              }
-            />
             <Route
               path="/cargos-funcoes"
               element={
