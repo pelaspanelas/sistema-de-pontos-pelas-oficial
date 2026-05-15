@@ -403,6 +403,7 @@ export type Database = {
       tarefas_concluidas: {
         Row: {
           created_at: string
+          criado_por: string | null
           data: string | null
           data_conclusao: string
           descricao: string | null
@@ -413,6 +414,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          criado_por?: string | null
           data?: string | null
           data_conclusao: string
           descricao?: string | null
@@ -423,6 +425,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          criado_por?: string | null
           data?: string | null
           data_conclusao?: string
           descricao?: string | null
@@ -769,6 +772,7 @@ export const Constants = {
 //   created_at: timestamp with time zone (not null, default: now())
 //   descricao: text (nullable)
 //   data: date (nullable)
+//   criado_por: uuid (nullable)
 
 // --- CONSTRAINTS ---
 // Table: ajuste_ponto
@@ -800,6 +804,7 @@ export const Constants = {
 //   CHECK tarefas_prioridade_check: CHECK ((prioridade = ANY (ARRAY[1, 2, 3])))
 //   FOREIGN KEY tarefas_responsavel_id_fkey: FOREIGN KEY (responsavel_id) REFERENCES profiles(id) ON DELETE CASCADE
 // Table: tarefas_concluidas
+//   FOREIGN KEY tarefas_concluidas_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES auth.users(id) ON DELETE SET NULL
 //   FOREIGN KEY tarefas_concluidas_funcionario_id_fkey: FOREIGN KEY (funcionario_id) REFERENCES profiles(id) ON DELETE CASCADE
 //   PRIMARY KEY tarefas_concluidas_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY tarefas_concluidas_tarefa_id_fkey: FOREIGN KEY (tarefa_id) REFERENCES tarefas(id) ON DELETE CASCADE

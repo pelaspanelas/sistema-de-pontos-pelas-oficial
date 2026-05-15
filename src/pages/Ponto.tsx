@@ -36,15 +36,19 @@ interface CameraCaptureProps {
 
 function CameraCapture({ open, onOpenChange, onCapture }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const [stream, setStream] = useState<MediaStream | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const [error, setError] = useState('')
+
+  const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
   const startCamera = useCallback(async () => {
     try {
+      setError('')
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user' },
       })
-      setStream(mediaStream)
+      streamRef.current = mediaStream
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream
       }
@@ -56,20 +60,23 @@ function CameraCapture({ open, onOpenChange, onCapture }: CameraCaptureProps) {
   }, [])
 
   const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop())
-      setStream(null)
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
     }
-  }, [stream])
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+  }, [])
 
   useEffect(() => {
-    if (open) {
+    if (open && !capturedBlob) {
       startCamera()
     } else {
       stopCamera()
     }
     return () => stopCamera()
-  }, [open, startCamera, stopCamera])
+  }, [open, capturedBlob, startCamera, stopCamera])
 
   const handleCapture = () => {
     if (videoRef.current) {
@@ -82,9 +89,9 @@ function CameraCapture({ open, onOpenChange, onCapture }: CameraCaptureProps) {
         canvas.toBlob(
           (blob) => {
             if (blob) {
-              onCapture(blob)
-              stopCamera()
-              onOpenChange(false)
+              const url = URL.createObjectURL(blob)
+              setPreviewUrl(url)
+              setCapturedBlob(blob)
             }
           },
           'image/jpeg',
@@ -94,14 +101,37 @@ function CameraCapture({ open, onOpenChange, onCapture }: CameraCaptureProps) {
     }
   }
 
+  const handleRetake = () => {
+    setCapturedBlob(null)
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl)
+      setPreviewUrl(null)
+    }
+  }
+
+  const handleConfirm = () => {
+    if (capturedBlob) {
+      onCapture(capturedBlob)
+      handleRetake()
+      onOpenChange(false)
+    }
+  }
+
+  const handleOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      handleRetake()
+    }
+    onOpenChange(isOpen)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Tirar Foto</DialogTitle>
+          <DialogTitle>{capturedBlob ? 'Confirmar Foto' : 'Tirar Foto'}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col items-center justify-center space-y-4 min-h-[300px]">
-          {error ? (
+          {error && !capturedBlob ? (
             <div className="text-destructive text-sm text-center p-4 bg-destructive/10 rounded-md flex flex-col items-center">
               <p className="mb-4">{error}</p>
               <Button
@@ -119,16 +149,36 @@ function CameraCapture({ open, onOpenChange, onCapture }: CameraCaptureProps) {
                 className="hidden"
                 onChange={(e) => {
                   if (e.target.files?.[0]) {
-                    onCapture(e.target.files[0])
-                    stopCamera()
-                    onOpenChange(false)
+                    const blob = e.target.files[0]
+                    const url = URL.createObjectURL(blob)
+                    setPreviewUrl(url)
+                    setCapturedBlob(blob)
                   }
                 }}
               />
             </div>
+          ) : capturedBlob && previewUrl ? (
+            <>
+              <div className="relative w-full max-w-sm aspect-[3/4] bg-black rounded-lg overflow-hidden border">
+                <img
+                  src={previewUrl}
+                  alt="Prévia"
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm">
+                <Button onClick={handleRetake} variant="outline" className="flex-1">
+                  Tentar Novamente
+                </Button>
+                <Button onClick={handleConfirm} className="flex-1 gap-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Usar Foto
+                </Button>
+              </div>
+            </>
           ) : (
             <>
-              <div className="relative w-full max-w-sm aspect-[3/4] bg-black rounded-lg overflow-hidden">
+              <div className="relative w-full max-w-sm aspect-[3/4] bg-black rounded-lg overflow-hidden border">
                 <video
                   ref={videoRef}
                   autoPlay
