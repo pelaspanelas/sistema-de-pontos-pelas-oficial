@@ -224,44 +224,6 @@ export default function EspelhoPonto() {
     if (user) fetchRecords()
   }, [user, selectedMonth, selectedYear, selectedUser])
 
-  useEffect(() => {
-    let changed = false
-    const updates: any[] = []
-    const newRecords = records.map((r) => {
-      if (r.entrada && r.saida_almoco && r.retorno_almoco && r.saida) {
-        const parseTime = (t: string) => {
-          const [h, m] = t.split(':').map(Number)
-          return h * 60 + m
-        }
-        const m1 = parseTime(r.entrada)
-        const m2 = parseTime(r.saida_almoco)
-        const m3 = parseTime(r.retorno_almoco)
-        const m4 = parseTime(r.saida)
-        const totalMins = m2 - m1 + (m4 - m3)
-        const hrs = totalMins / 60
-
-        const currentHrs = r.horas_calculadas ? Number(r.horas_calculadas) : null
-        if (currentHrs === null || Math.abs(currentHrs - hrs) > 0.001) {
-          changed = true
-          updates.push({ id: r.id, horas_calculadas: hrs })
-          return { ...r, horas_calculadas: hrs }
-        }
-      }
-      return r
-    })
-
-    if (changed) {
-      setRecords(newRecords)
-      updates.forEach((u) => {
-        supabase
-          .from('pontos_diarios')
-          .update({ horas_calculadas: u.horas_calculadas })
-          .eq('id', u.id)
-          .then()
-      })
-    }
-  }, [records])
-
   async function fetchUsers() {
     try {
       const { data, error } = await supabase
@@ -334,9 +296,42 @@ export default function EspelhoPonto() {
         }
       })
 
+      let fetchedRecords = resPontosDiarios.data || []
+      const updates: any[] = []
+
+      fetchedRecords = fetchedRecords.map((r) => {
+        if (r.entrada && r.saida_almoco && r.retorno_almoco && r.saida) {
+          const parseTime = (t: string) => {
+            const [h, m] = t.split(':').map(Number)
+            return h * 60 + m
+          }
+          const m1 = parseTime(r.entrada)
+          const m2 = parseTime(r.saida_almoco)
+          const m3 = parseTime(r.retorno_almoco)
+          const m4 = parseTime(r.saida)
+          const totalMins = m2 - m1 + (m4 - m3)
+          const hrs = totalMins / 60
+
+          const currentHrs = r.horas_calculadas ? Number(r.horas_calculadas) : null
+          if (currentHrs === null || Math.abs(currentHrs - hrs) > 0.001) {
+            updates.push({ id: r.id, horas_calculadas: hrs })
+            return { ...r, horas_calculadas: hrs }
+          }
+        }
+        return r
+      })
+
       setManualPointsMap(map)
-      setRecords(resPontosDiarios.data || [])
+      setRecords(fetchedRecords)
       setAjustesPendentes(resAjustes.data || [])
+
+      updates.forEach((u) => {
+        supabase
+          .from('pontos_diarios')
+          .update({ horas_calculadas: u.horas_calculadas })
+          .eq('id', u.id)
+          .then()
+      })
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao buscar registros', description: err.message })
     } finally {
