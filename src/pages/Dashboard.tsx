@@ -42,6 +42,8 @@ export default function Dashboard() {
   const [ajustes, setAjustes] = useState<any[]>([])
   const [tempoCasa, setTempoCasa] = useState<any[]>([])
   const [pontosForaHorario, setPontosForaHorario] = useState<any[]>([])
+  const [bancoHorasUsers, setBancoHorasUsers] = useState<any[]>([])
+  const [disablingBancoHorasId, setDisablingBancoHorasId] = useState<string | null>(null)
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth().toString())
   const [selectedStatus, setSelectedStatus] = useState('pendente')
@@ -174,6 +176,17 @@ export default function Dashboard() {
       ].filter((d) => d.value > 0)
 
       setTempoCasa(newChartData)
+
+      // Banco de Horas Ativos
+      const { data: bhUsers, error: errBh } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .eq('banco_horas_ativo', true)
+        .eq('status', 'Ativo')
+        .order('name')
+
+      if (errBh) throw errBh
+      setBancoHorasUsers(bhUsers || [])
     } catch (error: any) {
       toast({ title: 'Erro ao carregar dados', description: error.message, variant: 'destructive' })
     } finally {
@@ -311,6 +324,23 @@ export default function Dashboard() {
     } finally {
       setProcessingId(null)
       setConfirmModal({ open: false, type: 'aprovado', ajusteId: null })
+    }
+  }
+
+  const disableBancoHoras = async (id: string) => {
+    setDisablingBancoHorasId(id)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ banco_horas_ativo: false })
+        .eq('id', id)
+      if (error) throw error
+      toast({ title: 'Banco de horas desativado' })
+      setBancoHorasUsers((prev) => prev.filter((u) => u.id !== id))
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message })
+    } finally {
+      setDisablingBancoHorasId(null)
     }
   }
 
@@ -562,6 +592,52 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        <Card className="md:col-span-1 flex flex-col h-full max-h-[600px]">
+          <CardHeader>
+            <CardTitle>Colaboradores com Banco de Horas</CardTitle>
+            <CardDescription>Usuários com registro de ponto flexível</CardDescription>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-y-auto">
+            {bancoHorasUsers.length === 0 ? (
+              <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground border border-dashed rounded-lg bg-muted/20 p-8 text-center">
+                Nenhum colaborador com banco de horas ativo
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {bancoHorasUsers.map((user) => (
+                  <div
+                    key={user.id}
+                    className="flex items-center justify-between p-3 border rounded-lg bg-card"
+                  >
+                    <div className="flex flex-col">
+                      <span className="font-medium text-sm truncate max-w-[150px]">
+                        {user.name}
+                      </span>
+                      <span className="text-xs text-green-600 font-medium">Ativo</span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => disableBancoHoras(user.id)}
+                      disabled={disablingBancoHorasId === user.id}
+                      className="h-8 text-xs text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                    >
+                      {disablingBancoHorasId === user.id ? (
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      ) : (
+                        <X className="w-3 h-3 mr-1" />
+                      )}
+                      Desativar
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-3">
         <Card className="md:col-span-1 flex flex-col">
           <CardHeader>
             <CardTitle>Tempo de Casa</CardTitle>
@@ -592,10 +668,8 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
-      </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card className="md:col-span-3">
+        <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-orange-600">
               <AlertCircle className="w-5 h-5" />

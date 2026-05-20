@@ -307,18 +307,18 @@ export default function Ponto() {
       } else {
         toast({
           title: 'Ponto Registrado!',
-          description: `Registro efetuado com sucesso às ${timeStr}`,
+          description: result?.toastMsg || `Registro efetuado com sucesso às ${timeStr}`,
           className: 'bg-emerald-50 text-emerald-900 border-emerald-200',
         })
       }
 
       await loadPontoStatus()
     } catch (err: any) {
-      if (err.message === 'FORA_DO_HORARIO') {
+      if (err.message === 'FORA_DO_HORARIO_PERMITIDO') {
         toast({
           variant: 'destructive',
           title: 'Acesso Negado',
-          description: 'Fora do horário de trabalho',
+          description: 'Fora do horário permitido',
         })
       } else {
         toast({

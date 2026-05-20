@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/select'
 import { ColaboradorFormState } from '@/types/colaborador'
 import { maskDate, maskCurrency } from '@/lib/utils'
+import { Switch } from '@/components/ui/switch'
 
 export function TabProfissional({
   data,
@@ -68,6 +69,20 @@ export function TabProfissional({
           value={data.salarioBase}
           onChange={(e) => update('salarioBase', maskCurrency(e.target.value))}
         />
+      </div>
+      <div className="col-span-2 mt-2">
+        <div className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
+          <div className="space-y-0.5">
+            <Label className="text-base">Liberar Banco de Horas</Label>
+            <p className="text-sm text-muted-foreground">
+              Permite que o colaborador bata ponto em qualquer horário
+            </p>
+          </div>
+          <Switch
+            checked={data.banco_horas_ativo}
+            onCheckedChange={(v) => onChange({ ...data, banco_horas_ativo: v })}
+          />
+        </div>
       </div>
     </div>
   )

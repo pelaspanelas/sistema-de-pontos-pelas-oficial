@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
+import { Loader2 } from 'lucide-react'
 import { TabPessoal } from './TabPessoal'
 import { TabProfissional } from './TabProfissional'
 import { TabHorarios } from './TabHorarios'
@@ -74,6 +75,7 @@ export function ColaboradorFormModal({
       operacional: false,
       historico: false,
     },
+    banco_horas_ativo: false,
   })
 
   useEffect(() => {
@@ -125,6 +127,7 @@ export function ColaboradorFormModal({
               operacional: false,
               historico: false,
             },
+            banco_horas_ativo: p.banco_horas_ativo || false,
           })
         }
         setFetching(false)
@@ -155,6 +158,7 @@ export function ColaboradorFormModal({
           operacional: false,
           historico: false,
         },
+        banco_horas_ativo: false,
       })
     }
   }, [open, colaboradorId])
@@ -186,9 +190,19 @@ export function ColaboradorFormModal({
           p_permissions: formData.permissions,
         })
         if (error) throw error
-        toast({ title: 'Colaborador atualizado com sucesso!' })
+
+        const { error: errorBanco } = await supabase
+          .from('profiles')
+          .update({ banco_horas_ativo: formData.banco_horas_ativo })
+          .eq('id', formData.id)
+        if (errorBanco) throw errorBanco
+
+        toast({
+          title: 'Banco de horas atualizado',
+          description: 'Colaborador atualizado com sucesso.',
+        })
       } else {
-        const { error } = await supabase.rpc('create_user_account', {
+        const { data: newUserId, error } = await supabase.rpc('create_user_account', {
           p_email: formData.email,
           p_password: formData.senha || '123456',
           p_name: formData.nome,
@@ -209,7 +223,16 @@ export function ColaboradorFormModal({
           p_permissions: formData.permissions,
         })
         if (error) throw error
-        toast({ title: 'Colaborador salvo com sucesso!' })
+
+        if (newUserId) {
+          const { error: errorBanco } = await supabase
+            .from('profiles')
+            .update({ banco_horas_ativo: formData.banco_horas_ativo })
+            .eq('id', newUserId)
+          if (errorBanco) throw errorBanco
+        }
+
+        toast({ title: 'Banco de horas atualizado', description: 'Colaborador salvo com sucesso.' })
       }
 
       onOpenChange(false)
@@ -256,11 +279,12 @@ export function ColaboradorFormModal({
           </Tabs>
         )}
         <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancelar
           </Button>
           <Button onClick={handleSave} disabled={loading || fetching}>
-            Salvar
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {loading ? 'Salvando...' : 'Salvar'}
           </Button>
         </div>
       </DialogContent>

@@ -34,6 +34,18 @@ export async function registrarPonto({
   let toastVariant = 'default'
 
   try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('banco_horas_ativo')
+      .eq('id', profileId)
+      .single()
+
+    const hasBancoHoras = profile?.banco_horas_ativo === true
+
+    if (hasBancoHoras) {
+      toastMsg = 'Ponto registrado com banco de horas ativo'
+    }
+
     const now = new Date(dataHora)
     const dayOfWeek = now.getDay()
     const { data: schedule } = await supabase
@@ -47,34 +59,36 @@ export async function registrarPonto({
       const [ah, am] = horario.split(':').map(Number)
       const actualTime = ah * 60 + am
 
-      if (tipoPonto === 'entrada' && schedule.entry_time) {
-        const [eh, em] = schedule.entry_time.split(':').map(Number)
-        const expectedTime = eh * 60 + em
-        const diff = actualTime - expectedTime
+      if (!hasBancoHoras) {
+        if (tipoPonto === 'entrada' && schedule.entry_time) {
+          const [eh, em] = schedule.entry_time.split(':').map(Number)
+          const expectedTime = eh * 60 + em
+          const diff = actualTime - expectedTime
 
-        if (diff < -20) {
-          throw new Error('FORA_DO_HORARIO')
-        } else if (diff >= -20 && diff < -5) {
-          statusValidacao = `aviso_antecipado:${diff}`
-          toastMsg = 'Ponto registrado antes do horário'
-          toastVariant = 'warning'
-        }
-      } else if (tipoPonto === 'saída' && schedule.exit_time) {
-        const [eh, em] = schedule.exit_time.split(':').map(Number)
-        const expectedTime = eh * 60 + em
-        const diff = actualTime - expectedTime
+          if (diff < -20) {
+            throw new Error('FORA_DO_HORARIO_PERMITIDO')
+          } else if (diff >= -20 && diff < -5) {
+            statusValidacao = `aviso_antecipado:${diff}`
+            toastMsg = 'Ponto registrado antes do horário'
+            toastVariant = 'warning'
+          }
+        } else if (tipoPonto === 'saída' && schedule.exit_time) {
+          const [eh, em] = schedule.exit_time.split(':').map(Number)
+          const expectedTime = eh * 60 + em
+          const diff = actualTime - expectedTime
 
-        if (diff > 20) {
-          throw new Error('FORA_DO_HORARIO')
-        } else if (diff > 5 && diff <= 20) {
-          statusValidacao = `aviso_atrasado:${diff}`
-          toastMsg = 'Ponto registrado após o horário'
-          toastVariant = 'warning'
+          if (diff > 20) {
+            throw new Error('FORA_DO_HORARIO_PERMITIDO')
+          } else if (diff > 5 && diff <= 20) {
+            statusValidacao = `aviso_atrasado:${diff}`
+            toastMsg = 'Ponto registrado após o horário'
+            toastVariant = 'warning'
+          }
         }
       }
     }
   } catch (err: any) {
-    if (err.message === 'FORA_DO_HORARIO') {
+    if (err.message === 'FORA_DO_HORARIO_PERMITIDO') {
       throw err
     }
     // erro ao buscar horario, ignora e segue normal

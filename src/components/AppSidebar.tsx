@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
+import { useSidebar } from '@/components/ui/sidebar'
 import {
   LayoutDashboard,
   Clock,
@@ -35,8 +36,16 @@ export function AppSidebar() {
   const location = useLocation()
   const navigate = useNavigate()
   const { signOut, profile, loading: authLoading } = useAuth()
+  const { isMobile, setOpenMobile } = useSidebar()
+
+  const handleLinkClick = () => {
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }
 
   const handleSignOut = async () => {
+    handleLinkClick()
     await signOut()
     navigate('/login')
   }
@@ -69,6 +78,7 @@ export function AppSidebar() {
               <SidebarMenuButton
                 asChild
                 className="h-10 text-primary hover:text-primary hover:bg-primary/10 font-medium"
+                onClick={handleLinkClick}
               >
                 <Link to="/ponto">
                   <Fingerprint className="h-5 w-5 mr-2" />
@@ -178,6 +188,7 @@ export function AppSidebar() {
                       <SidebarMenuButton
                         asChild
                         isActive={isActive}
+                        onClick={handleLinkClick}
                         className={`h-9 px-3 ${isActive ? 'bg-primary/10 text-primary font-medium hover:bg-primary/15 hover:text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
                       >
                         <Link to={item.path}>
@@ -202,8 +213,10 @@ export function AppSidebar() {
             <SidebarMenuButton
               asChild
               className="h-10 text-primary hover:text-primary hover:bg-primary/10 font-medium"
+              onClick={handleLinkClick}
             >
               <Link to="/ponto">
+                {' '}
                 <Fingerprint className="h-5 w-5 mr-2" />
                 <span>Acessar Ponto</span>
               </Link>
