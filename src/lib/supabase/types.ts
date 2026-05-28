@@ -96,6 +96,53 @@ export type Database = {
         }
         Relationships: []
       }
+      lancamentos_folha: {
+        Row: {
+          ano: number
+          categoria: string
+          created_at: string
+          criado_por: string | null
+          descricao: string
+          id: string
+          mes: number
+          profile_id: string
+          tipo: string
+          valor: number
+        }
+        Insert: {
+          ano: number
+          categoria: string
+          created_at?: string
+          criado_por?: string | null
+          descricao: string
+          id?: string
+          mes: number
+          profile_id: string
+          tipo: string
+          valor?: number
+        }
+        Update: {
+          ano?: number
+          categoria?: string
+          created_at?: string
+          criado_por?: string | null
+          descricao?: string
+          id?: string
+          mes?: number
+          profile_id?: string
+          tipo?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'lancamentos_folha_profile_id_fkey'
+            columns: ['profile_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       pontos: {
         Row: {
           created_at: string
@@ -690,6 +737,17 @@ export const Constants = {
 //   created_at: timestamp with time zone (not null, default: now())
 //   updated_at: timestamp with time zone (not null, default: now())
 //   lido: boolean (nullable, default: false)
+// Table: lancamentos_folha
+//   id: uuid (not null, default: gen_random_uuid())
+//   profile_id: uuid (not null)
+//   mes: integer (not null)
+//   ano: integer (not null)
+//   tipo: text (not null)
+//   categoria: text (not null)
+//   valor: numeric (not null, default: 0)
+//   descricao: text (not null)
+//   created_at: timestamp with time zone (not null, default: now())
+//   criado_por: uuid (nullable)
 // Table: pontos
 //   id: uuid (not null, default: gen_random_uuid())
 //   nsr: integer (not null, default: nextval('pontos_nsr_seq'::regclass))
@@ -786,6 +844,11 @@ export const Constants = {
 // Table: informativos
 //   FOREIGN KEY informativos_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES auth.users(id) ON DELETE SET NULL
 //   PRIMARY KEY informativos_pkey: PRIMARY KEY (id)
+// Table: lancamentos_folha
+//   CHECK lancamentos_folha_categoria_check: CHECK ((categoria = ANY (ARRAY['credito'::text, 'debito'::text])))
+//   FOREIGN KEY lancamentos_folha_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES auth.users(id) ON DELETE SET NULL
+//   PRIMARY KEY lancamentos_folha_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY lancamentos_folha_profile_id_fkey: FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
 // Table: pontos
 //   FOREIGN KEY pontos_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES profiles(id) ON DELETE CASCADE
 //   UNIQUE pontos_nsr_key: UNIQUE (nsr)
@@ -833,6 +896,15 @@ export const Constants = {
 //   Policy "informativos_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: true
 //     WITH CHECK: true
+// Table: lancamentos_folha
+//   Policy "lancamentos_folha_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
+//   Policy "lancamentos_folha_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: is_manager_or_admin()
+//   Policy "lancamentos_folha_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
+//   Policy "lancamentos_folha_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
 // Table: pontos
 //   Policy "pontos_delete" (DELETE, PERMISSIVE) roles={authenticated}
 //     USING: (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND (profiles.access_level = 'total'::text))))

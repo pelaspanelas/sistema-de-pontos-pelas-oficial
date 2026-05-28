@@ -41,6 +41,8 @@ import {
   ArrowUpCircle,
   Clock,
   Bus,
+  Banknote,
+  Zap,
 } from 'lucide-react'
 
 interface Profile {
@@ -74,8 +76,14 @@ export default function FolhaPagamentoDetalhes() {
   const [daysWorked, setDaysWorked] = useState(0)
   const [totalHours, setTotalHours] = useState(0)
 
+  // Novas variáveis de estado para as projeções e controles de horas
+  const [expectedHours, setExpectedHours] = useState(0)
+  const [projectedDays, setProjectedDays] = useState(0)
+  const [nextMonthInfo, setNextMonthInfo] = useState({ month: 1, year: 2024, name: '' })
+
   const [dailyVt, setDailyVt] = useState('')
   const [savingVt, setSavingVt] = useState(false)
+  const [isSavingAdiantamento, setIsSavingAdiantamento] = useState(false)
 
   const [isLaunchModalOpen, setIsLaunchModalOpen] = useState(false)
   const [savingLaunch, setSavingLaunch] = useState(false)
@@ -120,6 +128,50 @@ export default function FolhaPagamentoDetalhes() {
       setDaysWorked(uniqueDays)
       setTotalHours(hours)
 
+      // Buscar escala para calcular dias esperados
+      const { data: schedulesData, error: schedulesErr } = await supabase
+        .from('schedules')
+        .select('day_of_week')
+        .eq('profile_id', id)
+
+      if (!schedulesErr && schedulesData) {
+        // Horas esperadas no mês atual
+        let scheduledDaysCurrentMonth = 0
+        const currentMonthDays = new Date(year, month, 0).getDate()
+        for (let i = 1; i <= currentMonthDays; i++) {
+          const date = new Date(year, month - 1, i)
+          const dayOfWeek = date.getDay()
+          if (schedulesData.some((s) => s.day_of_week === dayOfWeek)) {
+            scheduledDaysCurrentMonth++
+          }
+        }
+        // 7h 20m = 7 + 20/60 horas
+        setExpectedHours(scheduledDaysCurrentMonth * (7 + 20 / 60))
+
+        // Info do próximo mês para projeção de VT
+        let nextM = month + 1
+        let nextY = year
+        if (nextM > 12) {
+          nextM = 1
+          nextY++
+        }
+
+        const nextMonthName = new Date(nextY, nextM - 1).toLocaleString('pt-BR', { month: 'long' })
+        setNextMonthInfo({ month: nextM, year: nextY, name: nextMonthName })
+
+        // Dias previstos no próximo mês
+        let scheduledDaysNext = 0
+        const nextMonthDaysCount = new Date(nextY, nextM, 0).getDate()
+        for (let i = 1; i <= nextMonthDaysCount; i++) {
+          const date = new Date(nextY, nextM - 1, i)
+          const dayOfWeek = date.getDay()
+          if (schedulesData.some((s) => s.day_of_week === dayOfWeek)) {
+            scheduledDaysNext++
+          }
+        }
+        setProjectedDays(scheduledDaysNext)
+      }
+
       const { data: launchesData, error: launchesErr } = await supabase
         .from('lancamentos_folha')
         .select('id, tipo, categoria, valor, descricao')
@@ -142,12 +194,14 @@ export default function FolhaPagamentoDetalhes() {
   }
 
   async function handleAddVt() {
-    if (!dailyVt || Number(dailyVt) <= 0) return
+    if (!dailyVt || Number(dailyVt) <= 0 || projectedDays <= 0) return
     setSavingVt(true)
     try {
-      const valorTotal = Number(dailyVt) * daysWorked
-      const descricao = `Vale Transporte (${daysWorked} dias x R$ ${dailyVt})`
-      const existingVt = launches.find((l) => l.tipo === 'vt')
+      const valorTotal = Number(dailyVt) * projectedDays
+      const nextMonthStr = `${nextMonthInfo.month.toString().padStart(2, '0')}/${nextMonthInfo.year}`
+      const descricao = `VT Antecipado - ${nextMonthStr}`
+
+      const existingVt = launches.find((l) => l.tipo === 'vt' && l.descricao === descricao)
 
       if (existingVt) {
         const { error } = await supabase
@@ -169,13 +223,51 @@ export default function FolhaPagamentoDetalhes() {
         if (error) throw error
       }
 
-      toast({ title: 'Sucesso', description: 'Vale Transporte salvo com sucesso.' })
+      toast({ title: 'Sucesso', description: 'Vale Transporte projetado salvo com sucesso.' })
       setDailyVt('')
       fetchData()
     } catch (err) {
       toast({ title: 'Erro', description: 'Falha ao salvar VT.', variant: 'destructive' })
     } finally {
       setSavingVt(false)
+    }
+  }
+
+  async function handleAdiantamento() {
+    if (!profile?.base_salary) return
+    setIsSavingAdiantamento(true)
+    try {
+      const valor = profile.base_salary * 0.4
+      const descricao = 'Adiantamento Quinzenal (40%)'
+
+      const existingVale = launches.find((l) => l.tipo === 'vale' && l.descricao === descricao)
+
+      if (existingVale) {
+        const { error } = await supabase
+          .from('lancamentos_folha')
+          .update({ valor, descricao })
+          .eq('id', existingVale.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('lancamentos_folha').insert({
+          profile_id: id,
+          mes: month,
+          ano: year,
+          tipo: 'vale',
+          categoria: 'debito',
+          valor,
+          descricao,
+          criado_por: user?.id,
+        })
+        if (error) throw error
+      }
+
+      toast({ title: 'Sucesso', description: 'Adiantamento lançado com sucesso.' })
+      fetchData()
+    } catch (err) {
+      toast({ title: 'Erro', description: 'Falha ao lançar adiantamento.', variant: 'destructive' })
+    } finally {
+      setIsSavingAdiantamento(false)
     }
   }
 
@@ -245,6 +337,8 @@ export default function FolhaPagamentoDetalhes() {
   const netPay = (Number(profile.base_salary) || 0) + totalCredits - totalDebits
   const monthName = new Date(year, month - 1).toLocaleString('pt-BR', { month: 'long' })
 
+  const balanceHours = totalHours - expectedHours
+
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 animate-fade-in">
       <div className="flex items-center space-x-4 mb-8">
@@ -300,74 +394,34 @@ export default function FolhaPagamentoDetalhes() {
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bus className="h-5 w-5" />
-              Cálculo de Vale Transporte
-            </CardTitle>
-            <CardDescription>
-              Calcule o VT com base nos dias que o colaborador registrou ponto no sistema.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between items-center bg-muted/30 p-3 rounded-lg border">
-              <span className="text-sm font-medium text-muted-foreground">
-                Dias Trabalhados no Período
-              </span>
-              <span className="text-xl font-bold">{daysWorked}</span>
-            </div>
-            <div className="flex gap-3 items-end">
-              <div className="space-y-2 flex-1">
-                <Label>Valor Diário do VT (R$)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={dailyVt}
-                  onChange={(e) => setDailyVt(e.target.value)}
-                  placeholder="Ex: 15.50"
-                />
-              </div>
-              <Button onClick={handleAddVt} disabled={savingVt || !dailyVt || daysWorked === 0}>
-                {savingVt ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Plus className="h-4 w-4 mr-2" />
-                )}
-                Lançar VT
-              </Button>
-            </div>
-            {Number(dailyVt) > 0 && daysWorked > 0 && (
-              <p className="text-sm text-muted-foreground text-right">
-                Valor a ser lançado:{' '}
-                <strong className="text-foreground">
-                  {formatCurrency(Number(dailyVt) * daysWorked)}
-                </strong>
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
+      <div className="grid gap-4 lg:grid-cols-3 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5" />
-              Banco de Horas & Extras
+              Análise de Horas
             </CardTitle>
-            <CardDescription>Resumo de horas e opção de pagamento de hora extra.</CardDescription>
+            <CardDescription>
+              Comparativo de horas esperadas vs realizadas ({monthName}).
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-muted/30 p-3 rounded-lg border flex flex-col items-center justify-center">
-                <span className="text-sm font-medium text-muted-foreground">Horas Registradas</span>
-                <span className="text-xl font-bold">{totalHours.toFixed(1)}h</span>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-muted/30 p-2 rounded-lg border flex flex-col items-center justify-center">
+                <span className="text-xs font-medium text-muted-foreground">Esperadas</span>
+                <span className="text-lg font-bold">{expectedHours.toFixed(1)}h</span>
               </div>
-              <div className="bg-muted/30 p-3 rounded-lg border flex flex-col items-center justify-center">
-                <span className="text-sm font-medium text-muted-foreground">Banco de Horas</span>
-                <span className="text-xl font-bold">
-                  {profile.banco_horas_ativo ? 'Ativo' : 'Inativo'}
+              <div className="bg-muted/30 p-2 rounded-lg border flex flex-col items-center justify-center">
+                <span className="text-xs font-medium text-muted-foreground">Realizadas</span>
+                <span className="text-lg font-bold">{totalHours.toFixed(1)}h</span>
+              </div>
+              <div
+                className={`p-2 rounded-lg border flex flex-col items-center justify-center ${balanceHours >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'}`}
+              >
+                <span className="text-xs font-medium opacity-80">Saldo</span>
+                <span className="text-lg font-bold">
+                  {balanceHours > 0 ? '+' : ''}
+                  {balanceHours.toFixed(1)}h
                 </span>
               </div>
             </div>
@@ -386,6 +440,93 @@ export default function FolhaPagamentoDetalhes() {
             >
               <Plus className="h-4 w-4 mr-2" />
               Lançar Hora Extra
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bus className="h-5 w-5" />
+              Projeção de VT
+            </CardTitle>
+            <CardDescription>
+              Cálculo para {nextMonthInfo.name} de {nextMonthInfo.year}.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-3">
+              <div className="space-y-2 flex-1">
+                <Label>Dias Previstos</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={projectedDays}
+                  onChange={(e) => setProjectedDays(Number(e.target.value))}
+                />
+              </div>
+              <div className="space-y-2 flex-1">
+                <Label>Valor Diário (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={dailyVt}
+                  onChange={(e) => setDailyVt(e.target.value)}
+                  placeholder="Ex: 15.50"
+                />
+              </div>
+            </div>
+            <Button
+              className="w-full"
+              onClick={handleAddVt}
+              disabled={savingVt || !dailyVt || projectedDays === 0}
+            >
+              {savingVt ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Plus className="h-4 w-4 mr-2" />
+              )}
+              Lançar VT Projetado
+            </Button>
+            {Number(dailyVt) > 0 && projectedDays > 0 && (
+              <p className="text-sm text-muted-foreground text-center">
+                Valor total:{' '}
+                <strong className="text-foreground">
+                  {formatCurrency(Number(dailyVt) * projectedDays)}
+                </strong>
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              Ações Rápidas
+            </CardTitle>
+            <CardDescription>Ferramentas de adiantamento e bônus.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between items-center bg-muted/30 p-3 rounded-lg border">
+              <span className="text-sm font-medium text-muted-foreground">Valor Base (40%)</span>
+              <span className="text-xl font-bold text-rose-600 dark:text-rose-400">
+                {formatCurrency((profile.base_salary || 0) * 0.4)}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+              onClick={handleAdiantamento}
+              disabled={isSavingAdiantamento || !profile.base_salary}
+            >
+              {isSavingAdiantamento ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Banknote className="h-4 w-4 mr-2" />
+              )}
+              Lançar Adiantamento (40%)
             </Button>
           </CardContent>
         </Card>
