@@ -16,8 +16,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useNavigate } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
-import { DollarSign, Clock, Users, Loader2 } from 'lucide-react'
+import { DollarSign, Clock, Users, Loader2, ChevronRight } from 'lucide-react'
 
 interface PayrollItem {
   profileId: string
@@ -51,6 +52,7 @@ export default function FolhaPagamento() {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<PayrollItem[]>([])
   const { toast } = useToast()
+  const navigate = useNavigate()
 
   useEffect(() => {
     fetchData()
@@ -63,17 +65,25 @@ export default function FolhaPagamento() {
       const endDateDate = new Date(Number(year), Number(month), 0)
       const endDate = `${year}-${month.padStart(2, '0')}-${endDateDate.getDate().toString().padStart(2, '0')}`
 
-      const [{ data: profiles, error: errProfiles }, { data: pontos, error: errPontos }] =
-        await Promise.all([
-          supabase.from('profiles').select('id, name, role, base_salary').eq('status', 'Ativo'),
-          supabase
-            .from('pontos_diarios')
-            .select('profile_id, horas_calculadas')
-            .gte('data', startDate)
-            .lte('data', endDate),
-        ])
+      const [
+        { data: profiles, error: errProfiles },
+        { data: pontos, error: errPontos },
+        { data: launches, error: errLaunches },
+      ] = await Promise.all([
+        supabase.from('profiles').select('id, name, role, base_salary').eq('status', 'Ativo'),
+        supabase
+          .from('pontos_diarios')
+          .select('profile_id, horas_calculadas')
+          .gte('data', startDate)
+          .lte('data', endDate),
+        supabase
+          .from('lancamentos_folha')
+          .select('profile_id, categoria, valor')
+          .eq('mes', Number(month))
+          .eq('ano', Number(year)),
+      ])
 
-      if (errProfiles || errPontos) {
+      if (errProfiles || errPontos || errLaunches) {
         throw new Error('Erro ao carregar dados.')
       }
 
@@ -84,12 +94,19 @@ export default function FolhaPagamento() {
         hoursByProfile[p.profile_id] += h
       })
 
+      const launchesByProfile: Record<string, number> = {}
+      launches?.forEach((l) => {
+        const val = Number(l.valor) || 0
+        if (!launchesByProfile[l.profile_id]) launchesByProfile[l.profile_id] = 0
+        if (l.categoria === 'credito') launchesByProfile[l.profile_id] += val
+        if (l.categoria === 'debito') launchesByProfile[l.profile_id] -= val
+      })
+
       const payroll: PayrollItem[] = (profiles || [])
         .map((p) => {
           const totalHours = hoursByProfile[p.id] || 0
           const baseSalary = Number(p.base_salary) || 0
-          const hourlyRate = baseSalary / 220
-          const calculatedPayment = totalHours * hourlyRate
+          const calculatedPayment = baseSalary + (launchesByProfile[p.id] || 0)
 
           return {
             profileId: p.id,
@@ -212,24 +229,38 @@ export default function FolhaPagamento() {
             <TableHeader>
               <TableRow>
                 <TableHead>Colaborador</TableHead>
-                <TableHead className="text-right">Salário Base</TableHead>
-                <TableHead className="text-right">Horas Totais</TableHead>
+                <TableHead className="text-right hidden sm:table-cell">Salário Base</TableHead>
+                <TableHead className="text-right hidden sm:table-cell">Horas Totais</TableHead>
                 <TableHead className="text-right">Valor a Receber</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.map((item) => (
-                <TableRow key={item.profileId}>
+                <TableRow
+                  key={item.profileId}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() =>
+                    navigate(`/folha-pagamento/${item.profileId}?month=${month}&year=${year}`)
+                  }
+                >
                   <TableCell>
                     <div>
                       <p className="font-medium">{item.name}</p>
                       <p className="text-xs text-muted-foreground">{item.role}</p>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right">{formatCurrency(item.baseSalary)}</TableCell>
-                  <TableCell className="text-right">{formatHours(item.totalHours)}</TableCell>
+                  <TableCell className="text-right hidden sm:table-cell">
+                    {formatCurrency(item.baseSalary)}
+                  </TableCell>
+                  <TableCell className="text-right hidden sm:table-cell">
+                    {formatHours(item.totalHours)}
+                  </TableCell>
                   <TableCell className="text-right font-medium">
                     {formatCurrency(item.calculatedPayment)}
+                  </TableCell>
+                  <TableCell>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
                   </TableCell>
                 </TableRow>
               ))}
