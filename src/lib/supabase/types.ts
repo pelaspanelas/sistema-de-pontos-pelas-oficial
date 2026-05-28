@@ -235,6 +235,7 @@ export type Database = {
           address_number: string | null
           admission_date: string | null
           avatar_url: string | null
+          banco_horas_ativo: boolean
           base_salary: number | null
           birth_date: string | null
           city: string | null
@@ -258,6 +259,7 @@ export type Database = {
           address_number?: string | null
           admission_date?: string | null
           avatar_url?: string | null
+          banco_horas_ativo?: boolean
           base_salary?: number | null
           birth_date?: string | null
           city?: string | null
@@ -281,6 +283,7 @@ export type Database = {
           address_number?: string | null
           admission_date?: string | null
           avatar_url?: string | null
+          banco_horas_ativo?: boolean
           base_salary?: number | null
           birth_date?: string | null
           city?: string | null
@@ -739,6 +742,7 @@ export const Constants = {
 //   updated_at: timestamp with time zone (not null, default: now())
 //   permissions: jsonb (nullable, default: '{"cadastros": false, "historico": false, "operacional": false, "dashboard_principal": false, "dashboard_desempenho": false}'::jsonb)
 //   avatar_url: text (nullable)
+//   banco_horas_ativo: boolean (not null, default: false)
 // Table: schedules
 //   id: uuid (not null, default: gen_random_uuid())
 //   profile_id: uuid (not null)

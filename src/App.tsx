@@ -14,6 +14,7 @@ import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 import Tarefas from './pages/Tarefas'
 import Desempenho from './pages/Desempenho'
+import FolhaPagamento from './pages/FolhaPagamento'
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth()
@@ -128,8 +129,8 @@ const App = () => (
             <Route
               path="/folha-pagamento"
               element={
-                <PermissionGuard permission="operacional" requiresGerenciaOrAdmin>
-                  <Navigate to="/espelho-ponto" replace />
+                <PermissionGuard requiresGerenciaOrAdmin>
+                  <FolhaPagamento />
                 </PermissionGuard>
               }
             />
