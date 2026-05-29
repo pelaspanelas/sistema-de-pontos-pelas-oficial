@@ -55,6 +55,7 @@ interface Profile {
   admission_date: string
   base_salary: number
   banco_horas_ativo: boolean
+  valor_vt?: number
 }
 
 interface Launch {
@@ -106,11 +107,15 @@ export default function FolhaPagamentoDetalhes() {
     try {
       const { data: profileData, error: profileErr } = await supabase
         .from('profiles')
-        .select('id, name, role, cpf, admission_date, base_salary, banco_horas_ativo')
+        .select('id, name, role, cpf, admission_date, base_salary, banco_horas_ativo, valor_vt')
         .eq('id', id)
         .single()
       if (profileErr) throw profileErr
       setProfile(profileData)
+
+      if (profileData.valor_vt && Number(profileData.valor_vt) > 0) {
+        setDailyVt(profileData.valor_vt.toString())
+      }
 
       const startDate = `${year}-${month.toString().padStart(2, '0')}-01`
       const endDateDate = new Date(year, month, 0)
@@ -515,7 +520,7 @@ export default function FolhaPagamentoDetalhes() {
                 ) : (
                   <Plus className="h-4 w-4 mr-2" />
                 )}
-                Lançar VT Projetado
+                Confirmar Lançamento
               </Button>
               {Number(dailyVt) > 0 && projectedDays > 0 && (
                 <p className="text-sm text-muted-foreground text-center">

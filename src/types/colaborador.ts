@@ -32,6 +32,7 @@ export interface ColaboradorFormState {
   acesso: string
   dataAdmissao: string
   salarioBase: string
+  valor_vt: string
   schedules: ScheduleFormState[]
   permissions: PermissionsState
   banco_horas_ativo: boolean

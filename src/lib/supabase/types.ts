@@ -63,6 +63,38 @@ export type Database = {
           },
         ]
       }
+      feriados: {
+        Row: {
+          created_at: string
+          criado_por: string | null
+          data: string
+          id: string
+          nome: string
+        }
+        Insert: {
+          created_at?: string
+          criado_por?: string | null
+          data: string
+          id?: string
+          nome: string
+        }
+        Update: {
+          created_at?: string
+          criado_por?: string | null
+          data?: string
+          id?: string
+          nome?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'feriados_criado_por_fkey'
+            columns: ['criado_por']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       informativos: {
         Row: {
           created_at: string
@@ -728,6 +760,12 @@ export const Constants = {
 //   created_at: timestamp with time zone (nullable, default: now())
 //   updated_at: timestamp with time zone (nullable, default: now())
 //   tipo_ponto: text (nullable)
+// Table: feriados
+//   id: uuid (not null, default: gen_random_uuid())
+//   nome: text (not null)
+//   data: date (not null)
+//   created_at: timestamp with time zone (not null, default: now())
+//   criado_por: uuid (nullable)
 // Table: informativos
 //   id: uuid (not null, default: gen_random_uuid())
 //   titulo: text (not null)
@@ -841,6 +879,9 @@ export const Constants = {
 //   FOREIGN KEY ajuste_ponto_aprovado_por_fkey: FOREIGN KEY (aprovado_por) REFERENCES profiles(id) ON DELETE CASCADE
 //   PRIMARY KEY ajuste_ponto_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY ajuste_ponto_usuario_id_fkey: FOREIGN KEY (usuario_id) REFERENCES profiles(id) ON DELETE CASCADE
+// Table: feriados
+//   FOREIGN KEY feriados_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES profiles(id) ON DELETE SET NULL
+//   PRIMARY KEY feriados_pkey: PRIMARY KEY (id)
 // Table: informativos
 //   FOREIGN KEY informativos_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES auth.users(id) ON DELETE SET NULL
 //   PRIMARY KEY informativos_pkey: PRIMARY KEY (id)
@@ -885,6 +926,15 @@ export const Constants = {
 //   Policy "ajuste_ponto_select" (SELECT, PERMISSIVE) roles={authenticated}
 //     USING: ((usuario_id = auth.uid()) OR is_manager_or_admin())
 //   Policy "ajuste_ponto_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
+// Table: feriados
+//   Policy "feriados_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
+//   Policy "feriados_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: is_manager_or_admin()
+//   Policy "feriados_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: true
+//   Policy "feriados_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: is_manager_or_admin()
 // Table: informativos
 //   Policy "informativos_delete" (DELETE, PERMISSIVE) roles={authenticated}

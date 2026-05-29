@@ -67,6 +67,7 @@ export function ColaboradorFormModal({
     acesso: 'colaborador',
     dataAdmissao: '',
     salarioBase: '',
+    valor_vt: '',
     schedules: initialSchedules,
     permissions: {
       dashboard_principal: false,
@@ -119,6 +120,7 @@ export function ColaboradorFormModal({
             acesso: p.access_level || 'colaborador',
             dataAdmissao: p.admission_date ? p.admission_date.split('-').reverse().join('/') : '',
             salarioBase: p.base_salary ? (p.base_salary * 100).toString() : '',
+            valor_vt: p.valor_vt ? (p.valor_vt * 100).toString() : '',
             schedules: loadedSchedules,
             permissions: p.permissions || {
               dashboard_principal: false,
@@ -150,6 +152,7 @@ export function ColaboradorFormModal({
         acesso: 'colaborador',
         dataAdmissao: '',
         salarioBase: '',
+        valor_vt: '',
         schedules: initialSchedules,
         permissions: {
           dashboard_principal: false,
@@ -170,7 +173,7 @@ export function ColaboradorFormModal({
       const admissionDate = safeDateToDB(formData.dataAdmissao)
 
       if (formData.id) {
-        const { error } = await supabase.rpc('update_user_account', {
+        const args: any = {
           p_user_id: formData.id,
           p_name: formData.nome,
           p_phone: formData.telefone,
@@ -186,9 +189,11 @@ export function ColaboradorFormModal({
           p_access_level: formData.acesso,
           p_admission_date: admissionDate,
           p_base_salary: parseCurrencyToDBLocal(formData.salarioBase),
+          p_valor_vt: parseCurrencyToDBLocal(formData.valor_vt),
           p_schedules: formData.schedules,
           p_permissions: formData.permissions,
-        })
+        }
+        const { error } = await supabase.rpc('update_user_account', args)
         if (error) throw error
 
         const { error: errorBanco } = await supabase
@@ -202,7 +207,7 @@ export function ColaboradorFormModal({
           description: 'Colaborador atualizado com sucesso.',
         })
       } else {
-        const { data: newUserId, error } = await supabase.rpc('create_user_account', {
+        const args: any = {
           p_email: formData.email,
           p_password: formData.senha || '123456',
           p_name: formData.nome,
@@ -219,9 +224,11 @@ export function ColaboradorFormModal({
           p_access_level: formData.acesso,
           p_admission_date: admissionDate,
           p_base_salary: parseCurrencyToDBLocal(formData.salarioBase),
+          p_valor_vt: parseCurrencyToDBLocal(formData.valor_vt),
           p_schedules: formData.schedules,
           p_permissions: formData.permissions,
-        })
+        }
+        const { data: newUserId, error } = await supabase.rpc('create_user_account', args)
         if (error) throw error
 
         if (newUserId) {

@@ -70,6 +70,14 @@ export function TabProfissional({
           onChange={(e) => update('salarioBase', maskCurrency(e.target.value))}
         />
       </div>
+      <div className="space-y-2">
+        <Label>Valor Diário VT</Label>
+        <Input
+          placeholder="R$ 0,00"
+          value={data.valor_vt}
+          onChange={(e) => update('valor_vt', maskCurrency(e.target.value))}
+        />
+      </div>
       <div className="col-span-2 mt-2">
         <div className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
           <div className="space-y-0.5">
