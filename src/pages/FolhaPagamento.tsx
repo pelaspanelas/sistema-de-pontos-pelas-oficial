@@ -25,6 +25,8 @@ interface PayrollItem {
   name: string
   role: string
   baseSalary: number
+  totalCredits: number
+  totalDebits: number
   totalHours: number
   calculatedPayment: number
 }
@@ -94,25 +96,30 @@ export default function FolhaPagamento() {
         hoursByProfile[p.profile_id] += h
       })
 
-      const launchesByProfile: Record<string, number> = {}
+      const launchesByProfile: Record<string, { credits: number; debits: number }> = {}
       launches?.forEach((l) => {
         const val = Number(l.valor) || 0
-        if (!launchesByProfile[l.profile_id]) launchesByProfile[l.profile_id] = 0
-        if (l.categoria === 'credito') launchesByProfile[l.profile_id] += val
-        if (l.categoria === 'debito') launchesByProfile[l.profile_id] -= val
+        if (!launchesByProfile[l.profile_id])
+          launchesByProfile[l.profile_id] = { credits: 0, debits: 0 }
+        if (l.categoria === 'credito') launchesByProfile[l.profile_id].credits += val
+        if (l.categoria === 'debito') launchesByProfile[l.profile_id].debits += val
       })
 
       const payroll: PayrollItem[] = (profiles || [])
         .map((p) => {
           const totalHours = hoursByProfile[p.id] || 0
           const baseSalary = Number(p.base_salary) || 0
-          const calculatedPayment = baseSalary + (launchesByProfile[p.id] || 0)
+          const credits = launchesByProfile[p.id]?.credits || 0
+          const debits = launchesByProfile[p.id]?.debits || 0
+          const calculatedPayment = baseSalary + credits - debits
 
           return {
             profileId: p.id,
             name: p.name,
             role: p.role || 'Não definido',
             baseSalary,
+            totalCredits: credits,
+            totalDebits: debits,
             totalHours,
             calculatedPayment,
           }
@@ -230,16 +237,17 @@ export default function FolhaPagamento() {
               <TableRow>
                 <TableHead>Colaborador</TableHead>
                 <TableHead className="text-right hidden sm:table-cell">Salário Base</TableHead>
-                <TableHead className="text-right hidden sm:table-cell">Horas Totais</TableHead>
-                <TableHead className="text-right">Valor a Receber</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
+                <TableHead className="text-right hidden md:table-cell">Créditos</TableHead>
+                <TableHead className="text-right hidden md:table-cell">Débitos</TableHead>
+                <TableHead className="text-right">Valor Líquido</TableHead>
+                <TableHead className="w-[100px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.map((item) => (
                 <TableRow
                   key={item.profileId}
-                  className="cursor-pointer hover:bg-muted/50"
+                  className="cursor-pointer hover:bg-muted/50 group"
                   onClick={() =>
                     navigate(`/folha-pagamento/${item.profileId}?month=${month}&year=${year}`)
                   }
@@ -253,14 +261,20 @@ export default function FolhaPagamento() {
                   <TableCell className="text-right hidden sm:table-cell">
                     {formatCurrency(item.baseSalary)}
                   </TableCell>
-                  <TableCell className="text-right hidden sm:table-cell">
-                    {formatHours(item.totalHours)}
+                  <TableCell className="text-right hidden md:table-cell text-emerald-600">
+                    +{formatCurrency(item.totalCredits)}
                   </TableCell>
-                  <TableCell className="text-right font-medium">
+                  <TableCell className="text-right hidden md:table-cell text-rose-600">
+                    -{formatCurrency(item.totalDebits)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold text-primary">
                     {formatCurrency(item.calculatedPayment)}
                   </TableCell>
-                  <TableCell>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
+                  <TableCell className="text-right">
+                    <span className="text-xs text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity mr-2">
+                      Ver Detalhes
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground inline-block" />
                   </TableCell>
                 </TableRow>
               ))}

@@ -127,6 +127,7 @@ export function AppSidebar() {
         { name: 'Colaboradores', path: '/colaboradores', icon: Users },
         { name: 'Cargos e Funções', path: '/cargos-funcoes', icon: Briefcase },
         { name: 'Tarefas', path: '/tarefas', icon: CheckSquare },
+        { name: 'Feriados', path: '/feriados', icon: Calendar },
       ],
     })
   }
