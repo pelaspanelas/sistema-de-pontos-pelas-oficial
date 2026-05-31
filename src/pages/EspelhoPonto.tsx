@@ -16,12 +16,31 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Calendar as CalendarIcon, Clock, Pencil } from 'lucide-react'
+import {
+  Calendar as CalendarIcon,
+  Clock,
+  Pencil,
+  LayoutList,
+  CalendarDays as CalendarDaysIcon,
+} from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/hooks/use-toast'
-import { format, parseISO, endOfMonth } from 'date-fns'
+import {
+  format,
+  parseISO,
+  endOfMonth,
+  startOfMonth,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  isSameMonth,
+  isToday,
+  isWeekend,
+} from 'date-fns'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -206,7 +225,9 @@ export default function EspelhoPonto() {
     {},
   )
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
+  const [feriados, setFeriados] = useState<any[]>([])
 
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth().toString())
   const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR)
   const [selectedUser, setSelectedUser] = useState<string>('me')
@@ -254,7 +275,7 @@ export default function EspelhoPonto() {
       const start = format(new Date(yearInt, monthInt, 1), 'yyyy-MM-dd')
       const end = format(endOfMonth(new Date(yearInt, monthInt, 1)), 'yyyy-MM-dd')
 
-      const [resPontosDiarios, resAjustes, resPontos] = await Promise.all([
+      const [resPontosDiarios, resAjustes, resPontos, resFeriados] = await Promise.all([
         supabase
           .from('pontos_diarios')
           .select('*')
@@ -275,11 +296,13 @@ export default function EspelhoPonto() {
           .eq('profile_id', targetUserId)
           .gte('data', start)
           .lte('data', end),
+        supabase.from('feriados').select('*').gte('data', start).lte('data', end),
       ])
 
       if (resPontosDiarios.error) throw resPontosDiarios.error
       if (resAjustes.error) throw resAjustes.error
       if (resPontos.error) throw resPontos.error
+      if (resFeriados.error) throw resFeriados.error
 
       const map: Record<string, Record<string, boolean>> = {}
       resPontos.data?.forEach((p) => {
@@ -324,6 +347,7 @@ export default function EspelhoPonto() {
       setManualPointsMap(map)
       setRecords(fetchedRecords)
       setAjustesPendentes(resAjustes.data || [])
+      setFeriados(resFeriados.data || [])
 
       updates.forEach((u) => {
         supabase
@@ -469,6 +493,22 @@ export default function EspelhoPonto() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <div className="hidden sm:block">
+            <ToggleGroup
+              type="single"
+              value={viewMode}
+              onValueChange={(v) => v && setViewMode(v as 'list' | 'calendar')}
+              className="bg-background border rounded-md h-10 p-1"
+            >
+              <ToggleGroupItem value="list" aria-label="Lista" className="px-3 text-sm">
+                <LayoutList className="h-4 w-4 mr-2" /> Lista
+              </ToggleGroupItem>
+              <ToggleGroupItem value="calendar" aria-label="Calendário" className="px-3 text-sm">
+                <CalendarDaysIcon className="h-4 w-4 mr-2" /> Calendário
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+
           {isManagerOrAdmin && (
             <Select value={selectedUser} onValueChange={setSelectedUser}>
               <SelectTrigger className="w-full sm:w-[200px] bg-background">
@@ -540,11 +580,155 @@ export default function EspelhoPonto() {
           <CardDescription>Resumo de horas trabalhadas no período selecionado.</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="sm:hidden mb-4">
+            <ToggleGroup
+              type="single"
+              value={viewMode}
+              onValueChange={(v) => v && setViewMode(v as 'list' | 'calendar')}
+              className="bg-background border rounded-md p-1 w-full flex"
+            >
+              <ToggleGroupItem value="list" aria-label="Lista" className="flex-1 text-sm">
+                <LayoutList className="h-4 w-4 mr-2" /> Lista
+              </ToggleGroupItem>
+              <ToggleGroupItem value="calendar" aria-label="Calendário" className="flex-1 text-sm">
+                <CalendarDaysIcon className="h-4 w-4 mr-2" /> Calendário
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+
           {loading ? (
             <div className="space-y-3">
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-10 w-full" />
+            </div>
+          ) : viewMode === 'calendar' ? (
+            <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
+              <div className="min-w-[700px] border rounded-md overflow-hidden bg-background">
+                <div className="grid grid-cols-7 border-b bg-muted/50 [&>div:nth-child(7n)]:border-r-0">
+                  {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d) => (
+                    <div key={d} className="p-2 text-center text-sm font-semibold border-r">
+                      {d}
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 [&>div:nth-child(7n)]:border-r-0">
+                  {(() => {
+                    const monthInt = parseInt(selectedMonth, 10)
+                    const yearInt = parseInt(selectedYear, 10)
+                    const baseDate = new Date(yearInt, monthInt, 1)
+
+                    const start = startOfWeek(startOfMonth(baseDate))
+                    const end = endOfWeek(endOfMonth(baseDate))
+                    const days = eachDayOfInterval({ start, end })
+
+                    return days.map((day, i) => {
+                      const dateStr = format(day, 'yyyy-MM-dd')
+                      const record = rowsWithBalance.find((r) => r.data === dateStr)
+                      const feriado = feriados.find((f) => f.data === dateStr)
+                      const isCurrentMonth = isSameMonth(day, baseDate)
+                      const isWknd = isWeekend(day)
+                      const isDayToday = isToday(day)
+
+                      return (
+                        <div
+                          key={dateStr}
+                          className={cn(
+                            'border-b border-r p-2 min-h-[120px] flex flex-col gap-1 transition-colors cursor-pointer group',
+                            !isCurrentMonth && 'bg-muted/20 opacity-60',
+                            isCurrentMonth && isWknd && 'bg-muted/10',
+                            isCurrentMonth && feriado && 'bg-orange-50/30',
+                            'hover:bg-muted/30',
+                          )}
+                          onClick={() => openAjusteModal(dateStr, 'entrada')}
+                        >
+                          <div className="flex justify-between items-start">
+                            <span
+                              className={cn(
+                                'text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full',
+                                isDayToday
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'text-foreground',
+                              )}
+                            >
+                              {format(day, 'd')}
+                            </span>
+                            {feriado && isCurrentMonth && (
+                              <span
+                                className="text-[10px] text-orange-700 font-semibold truncate max-w-[60px] bg-orange-100/80 px-1 py-0.5 rounded"
+                                title={feriado.nome}
+                              >
+                                {feriado.nome}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-1 flex-1 flex flex-col justify-end">
+                            {record ? (
+                              <div className="text-[11px] space-y-0.5">
+                                {['entrada', 'saida_almoco', 'retorno_almoco', 'saida'].map(
+                                  (field) => {
+                                    const labels: Record<string, string> = {
+                                      entrada: 'Ent',
+                                      saida_almoco: 'S.Alm',
+                                      retorno_almoco: 'R.Alm',
+                                      saida: 'Saí',
+                                    }
+                                    const val = record[field]
+                                    const isManual = manualPointsMap[dateStr]?.[field]
+                                    const hasPending = ajustesPendentes.some(
+                                      (a) => a.data_ponto === dateStr && a.tipo_ponto === field,
+                                    )
+
+                                    return (
+                                      <div
+                                        key={field}
+                                        className="flex justify-between items-center group/item"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          openAjusteModal(dateStr, field)
+                                        }}
+                                      >
+                                        <span className="text-muted-foreground">
+                                          {labels[field]}:
+                                        </span>
+                                        <span
+                                          className={cn(
+                                            'font-medium transition-colors cursor-pointer group-hover/item:text-primary',
+                                            isManual
+                                              ? 'text-blue-600'
+                                              : val
+                                                ? 'text-foreground'
+                                                : '',
+                                            !val && hasPending && 'text-orange-500',
+                                            !val && !hasPending && 'text-muted-foreground/30',
+                                          )}
+                                        >
+                                          {val ? val : hasPending ? 'Pendente' : '--:--'}
+                                        </span>
+                                      </div>
+                                    )
+                                  },
+                                )}
+                                <div className="pt-1 mt-1 border-t flex justify-between items-center font-semibold">
+                                  <span className="text-muted-foreground">Tot:</span>
+                                  <span className={getHoursColor(record.horas_calculadas)}>
+                                    {formatDecimalHours(record.horas_calculadas)}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-xs text-muted-foreground/40 text-center flex-1 flex items-center justify-center group-hover:text-primary/50 transition-colors">
+                                Sem registro
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
+              </div>
             </div>
           ) : rowsWithBalance.length === 0 ? (
             <div className="text-center py-10">
