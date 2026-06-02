@@ -36,11 +36,12 @@ export async function registrarPonto({
   try {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('banco_horas_ativo')
+      .select('banco_horas_ativo, role')
       .eq('id', profileId)
       .single()
 
     const hasBancoHoras = profile?.banco_horas_ativo === true
+    const role = profile?.role
 
     if (hasBancoHoras) {
       toastMsg = 'Ponto registrado com banco de horas ativo'
@@ -77,7 +78,10 @@ export async function registrarPonto({
           const expectedTime = eh * 60 + em
           const diff = actualTime - expectedTime
 
-          if (diff > 15) {
+          // Role-based validation config point
+          const isTolerantRole = role === 'Diretor' || role === 'Sócio'
+
+          if (!isTolerantRole && diff > 15) {
             throw new Error('LIMITE_SAIDA_EXCEDIDO')
           } else if (diff > 5 && diff <= 15) {
             statusValidacao = `aviso_atrasado:${diff}`

@@ -22,6 +22,8 @@ import {
   Pencil,
   LayoutList,
   CalendarDays as CalendarDaysIcon,
+  FileDown,
+  Settings2,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase/client'
@@ -508,6 +510,42 @@ export default function EspelhoPonto() {
   const totalAccumulated =
     rowsWithBalance.length > 0 ? rowsWithBalance[0].horas_acumuladas_linha : 0
 
+  const exportToCSV = () => {
+    const headers = [
+      'Data',
+      'Entrada',
+      'Saída Almoço',
+      'Retorno Almoço',
+      'Saída',
+      'Total Horas',
+      'Horas Acumuladas',
+    ]
+
+    const csvContent = [
+      headers.join(','),
+      ...rowsWithBalance.map((row) =>
+        [
+          format(parseISO(row.data), 'dd/MM/yyyy'),
+          row.entrada || '--:--',
+          row.saida_almoco || '--:--',
+          row.retorno_almoco || '--:--',
+          row.saida || '--:--',
+          formatDecimalHours(row.horas_calculadas),
+          formatDecimalHours(row.horas_acumuladas_linha),
+        ].join(','),
+      ),
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    link.setAttribute('download', `espelho_ponto_${selectedMonth}_${selectedYear}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   function openActionModal(data_ponto: string, field: string = 'entrada', rowRecord?: any) {
     if (isManagerOrAdmin) {
       const rec = rowRecord || records.find((r) => r.data === data_ponto)
@@ -583,38 +621,72 @@ export default function EspelhoPonto() {
 
       for (const [key, tipoPonto] of Object.entries(colMap)) {
         const horario = form[key as keyof typeof form]
-        if (horario) {
-          const { data: existing } = await supabase
-            .from('pontos')
-            .select('id')
-            .eq('profile_id', targetUserId)
-            .eq('data', adminEditData.data_ponto)
-            .eq('tipo_ponto', tipoPonto)
-            .maybeSingle()
+        const oldHorario = adminEditData.record?.[key] || null
 
-          if (existing) {
-            await supabase
+        if (horario !== oldHorario) {
+          if (horario) {
+            const { data: existing } = await supabase
               .from('pontos')
-              .update({ horario, tipo_registro: 'manual' })
-              .eq('id', existing.id)
+              .select('id')
+              .eq('profile_id', targetUserId)
+              .eq('data', adminEditData.data_ponto)
+              .eq('tipo_ponto', tipoPonto)
+              .maybeSingle()
+
+            let pontoId = existing?.id
+
+            if (existing) {
+              await supabase
+                .from('pontos')
+                .update({ horario, tipo_registro: 'manual' })
+                .eq('id', existing.id)
+            } else {
+              const { data: newPonto } = await supabase
+                .from('pontos')
+                .insert({
+                  profile_id: targetUserId,
+                  criado_por: user!.id,
+                  data: adminEditData.data_ponto,
+                  data_hora: new Date(`${adminEditData.data_ponto}T${horario}:00`).toISOString(),
+                  tipo_ponto: tipoPonto,
+                  horario,
+                  tipo_registro: 'manual',
+                })
+                .select('id')
+                .single()
+              pontoId = newPonto?.id
+            }
+
+            if (pontoId) {
+              await supabase.from('historico_alteracoes_ponto').insert({
+                ponto_id: pontoId,
+                alterado_por: user!.id,
+                coluna_alterada: key,
+                valor_anterior: oldHorario,
+                valor_novo: horario,
+              } as any)
+            }
           } else {
-            await supabase.from('pontos').insert({
-              profile_id: targetUserId,
-              criado_por: user!.id,
-              data: adminEditData.data_ponto,
-              data_hora: new Date().toISOString(),
-              tipo_ponto: tipoPonto,
-              horario,
-              tipo_registro: 'manual',
-            })
+            const { data: existing } = await supabase
+              .from('pontos')
+              .select('id')
+              .eq('profile_id', targetUserId)
+              .eq('data', adminEditData.data_ponto)
+              .eq('tipo_ponto', tipoPonto)
+              .maybeSingle()
+
+            if (existing) {
+              await supabase.from('historico_alteracoes_ponto').insert({
+                ponto_id: existing.id,
+                alterado_por: user!.id,
+                coluna_alterada: key,
+                valor_anterior: oldHorario,
+                valor_novo: null,
+              } as any)
+
+              await supabase.from('pontos').delete().eq('id', existing.id)
+            }
           }
-        } else {
-          await supabase
-            .from('pontos')
-            .delete()
-            .eq('profile_id', targetUserId)
-            .eq('data', adminEditData.data_ponto)
-            .eq('tipo_ponto', tipoPonto)
         }
       }
 
@@ -682,13 +754,21 @@ export default function EspelhoPonto() {
         <span
           className={cn(
             isManual
-              ? 'text-blue-600 font-semibold'
+              ? 'text-blue-600 font-semibold flex items-center gap-1'
               : value
                 ? 'text-muted-foreground'
                 : 'text-muted-foreground',
           )}
         >
           {value || '--:--'}
+          {isManual && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Settings2 className="w-3 h-3 text-blue-500" />
+              </TooltipTrigger>
+              <TooltipContent>Editado Manualmente</TooltipContent>
+            </Tooltip>
+          )}
         </span>
         {(!value || isManagerOrAdmin) && !hasPending && (
           <button
@@ -716,6 +796,7 @@ export default function EspelhoPonto() {
         <span className="text-muted-foreground block text-xs">{label}</span>
         <span className={`font-medium flex items-center gap-2 ${isManual ? 'text-blue-600' : ''}`}>
           {value || '--:--'}
+          {isManual && <Settings2 className="w-3 h-3 text-blue-500" />}
           {(!value || isManagerOrAdmin) && !hasPending && (
             <button
               type="button"
@@ -778,6 +859,13 @@ export default function EspelhoPonto() {
           )}
 
           <div className="flex gap-2 w-full sm:w-auto">
+            <Button
+              variant="outline"
+              onClick={exportToCSV}
+              className="hidden sm:flex gap-2 h-10 px-3"
+            >
+              <FileDown className="w-4 h-4" /> Exportar
+            </Button>
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="w-full sm:w-[140px] bg-background">
                 <CalendarIcon className="h-4 w-4 mr-2" />
@@ -832,12 +920,12 @@ export default function EspelhoPonto() {
           <CardDescription>Resumo de horas trabalhadas no período selecionado.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="sm:hidden mb-4">
+          <div className="sm:hidden mb-4 flex gap-2">
             <ToggleGroup
               type="single"
               value={viewMode}
               onValueChange={(v) => v && setViewMode(v as 'list' | 'calendar')}
-              className="bg-background border rounded-md p-1 w-full flex"
+              className="bg-background border rounded-md p-1 flex-1 flex"
             >
               <ToggleGroupItem value="list" aria-label="Lista" className="flex-1 text-sm">
                 <LayoutList className="h-4 w-4 mr-2" /> Lista
@@ -846,6 +934,9 @@ export default function EspelhoPonto() {
                 <CalendarDaysIcon className="h-4 w-4 mr-2" /> Calendário
               </ToggleGroupItem>
             </ToggleGroup>
+            <Button variant="outline" onClick={exportToCSV} className="h-10 px-3">
+              <FileDown className="w-4 h-4" />
+            </Button>
           </div>
 
           {loading ? (
