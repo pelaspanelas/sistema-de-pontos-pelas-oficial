@@ -141,10 +141,11 @@ export default function Dashboard() {
       const { data: foraHorarioData, error: errForaHorario } = await supabase
         .from('pontos')
         .select(`
-          id, data, horario, tipo_ponto, status_validacao, created_at,
+          id, data, horario, tipo_ponto, status_validacao, created_at, alerta_visualizado,
           profiles!pontos_profile_id_fkey(name)
         `)
         .not('status_validacao', 'is', null)
+        .or('alerta_visualizado.eq.false,alerta_visualizado.is.null')
         .gte('data', targetMonthStart)
         .lte('data', targetMonthEnd)
         .order('created_at', { ascending: false })
@@ -324,6 +325,21 @@ export default function Dashboard() {
     } finally {
       setProcessingId(null)
       setConfirmModal({ open: false, type: 'aprovado', ajusteId: null })
+    }
+  }
+
+  const handleDismissAlert = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('pontos')
+        .update({ alerta_visualizado: true })
+        .eq('id', id)
+
+      if (error) throw error
+      setPontosForaHorario((prev) => prev.filter((p) => p.id !== id))
+      toast({ title: 'Alerta dispensado' })
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro ao dispensar alerta', description: err.message })
     }
   }
 
@@ -707,6 +723,15 @@ export default function Dashboard() {
                           >
                             {diff > 0 ? `+${diff} min` : `${diff} min`}
                           </Badge>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0 -mr-1"
+                            onClick={() => handleDismissAlert(p.id)}
+                            title="Dispensar alerta"
+                          >
+                            <Check className="h-4 w-4 text-orange-600 hover:text-orange-800" />
+                          </Button>
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {format(parseISO(p.data), 'dd/MM/yyyy')} às {p.horario}

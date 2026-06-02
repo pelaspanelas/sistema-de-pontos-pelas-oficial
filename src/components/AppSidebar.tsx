@@ -166,7 +166,11 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="h-16 flex items-center justify-center border-b border-border/50">
-        <Link to="/" className="flex flex-col items-center gap-1 text-primary">
+        <Link
+          to="/"
+          onClick={handleLinkClick}
+          className="flex flex-col items-center gap-1 text-primary"
+        >
           <ChefHat className="h-8 w-8" />
           <span className="font-semibold text-sm tracking-tight text-foreground">
             Pelas Panelas

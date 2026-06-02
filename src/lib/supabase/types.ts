@@ -95,6 +95,47 @@ export type Database = {
           },
         ]
       }
+      ferias: {
+        Row: {
+          created_at: string
+          data_fim: string
+          data_inicio: string
+          id: string
+          observacoes: string | null
+          profile_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data_fim: string
+          data_inicio: string
+          id?: string
+          observacoes?: string | null
+          profile_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data_fim?: string
+          data_inicio?: string
+          id?: string
+          observacoes?: string | null
+          profile_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'ferias_profile_id_fkey'
+            columns: ['profile_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       historico_alteracoes_ponto: {
         Row: {
           alterado_por: string
@@ -793,6 +834,15 @@ export const Constants = {
 //   data: date (not null)
 //   created_at: timestamp with time zone (not null, default: now())
 //   criado_por: uuid (nullable)
+// Table: ferias
+//   id: uuid (not null, default: gen_random_uuid())
+//   profile_id: uuid (not null)
+//   data_inicio: date (not null)
+//   data_fim: date (not null)
+//   status: text (not null, default: 'agendada'::text)
+//   observacoes: text (nullable)
+//   created_at: timestamp with time zone (not null, default: now())
+//   updated_at: timestamp with time zone (not null, default: now())
 // Table: historico_alteracoes_ponto
 //   id: uuid (not null, default: gen_random_uuid())
 //   ponto_id: uuid (nullable)
@@ -918,6 +968,9 @@ export const Constants = {
 // Table: feriados
 //   FOREIGN KEY feriados_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES profiles(id) ON DELETE SET NULL
 //   PRIMARY KEY feriados_pkey: PRIMARY KEY (id)
+// Table: ferias
+//   PRIMARY KEY ferias_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY ferias_profile_id_fkey: FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
 // Table: historico_alteracoes_ponto
 //   FOREIGN KEY historico_alteracoes_ponto_alterado_por_fkey: FOREIGN KEY (alterado_por) REFERENCES profiles(id) ON DELETE CASCADE
 //   PRIMARY KEY historico_alteracoes_ponto_pkey: PRIMARY KEY (id)
@@ -975,6 +1028,15 @@ export const Constants = {
 //   Policy "feriados_select" (SELECT, PERMISSIVE) roles={authenticated}
 //     USING: true
 //   Policy "feriados_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
+// Table: ferias
+//   Policy "ferias_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
+//   Policy "ferias_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: is_manager_or_admin()
+//   Policy "ferias_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: ((profile_id = auth.uid()) OR is_manager_or_admin())
+//   Policy "ferias_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: is_manager_or_admin()
 // Table: historico_alteracoes_ponto
 //   Policy "historico_insert" (INSERT, PERMISSIVE) roles={authenticated}
@@ -1227,6 +1289,8 @@ export const Constants = {
 //   CREATE INDEX ajuste_ponto_data_ponto_idx ON public.ajuste_ponto USING btree (data_ponto)
 //   CREATE INDEX ajuste_ponto_status_idx ON public.ajuste_ponto USING btree (status)
 //   CREATE INDEX ajuste_ponto_usuario_id_idx ON public.ajuste_ponto USING btree (usuario_id)
+// Table: ferias
+//   CREATE INDEX ferias_profile_id_idx ON public.ferias USING btree (profile_id)
 // Table: pontos
 //   CREATE INDEX pontos_data_idx ON public.pontos USING btree (data)
 //   CREATE UNIQUE INDEX pontos_nsr_key ON public.pontos USING btree (nsr)
