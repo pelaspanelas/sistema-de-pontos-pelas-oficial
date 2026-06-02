@@ -102,6 +102,128 @@ function getHoursColor(decimal: number | null | undefined) {
   return mins >= 440 ? 'text-emerald-600' : 'text-red-600'
 }
 
+function AdminEditModal({
+  open,
+  onOpenChange,
+  dataPonto,
+  record,
+  onSubmit,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  dataPonto: string
+  record: any
+  onSubmit: (form: any) => Promise<void>
+}) {
+  const [form, setForm] = useState({
+    entrada: '',
+    saida_almoco: '',
+    retorno_almoco: '',
+    saida: '',
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { toast } = useToast()
+
+  useEffect(() => {
+    if (open) {
+      setForm({
+        entrada: record?.entrada || '',
+        saida_almoco: record?.saida_almoco || '',
+        retorno_almoco: record?.retorno_almoco || '',
+        saida: record?.saida || '',
+      })
+    }
+  }, [open, record])
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/
+    const fields = ['entrada', 'saida_almoco', 'retorno_almoco', 'saida'] as const
+    for (const f of fields) {
+      if (form[f] && !form[f].match(timeRegex)) {
+        toast({
+          variant: 'destructive',
+          title: 'Horário inválido',
+          description: `Formato inválido. Use HH:mm`,
+        })
+        return
+      }
+    }
+
+    setIsSubmitting(true)
+    await onSubmit(form)
+    setIsSubmitting(false)
+  }
+
+  const handleChange = (field: string, value: string) => {
+    let v = value.replace(/\D/g, '')
+    if (v.length > 4) v = v.slice(0, 4)
+    if (v.length >= 3) {
+      v = v.slice(0, 2) + ':' + v.slice(2)
+    }
+    setForm((prev) => ({ ...prev, [field]: v }))
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Ajuste Manual de Ponto (Admin)</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Data</Label>
+            <Input value={dataPonto ? format(parseISO(dataPonto), 'dd/MM/yyyy') : ''} disabled />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Entrada</Label>
+              <Input
+                placeholder="00:00"
+                value={form.entrada}
+                onChange={(e) => handleChange('entrada', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Saída Almoço</Label>
+              <Input
+                placeholder="00:00"
+                value={form.saida_almoco}
+                onChange={(e) => handleChange('saida_almoco', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Retorno Almoço</Label>
+              <Input
+                placeholder="00:00"
+                value={form.retorno_almoco}
+                onChange={(e) => handleChange('retorno_almoco', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Saída</Label>
+              <Input
+                placeholder="00:00"
+                value={form.saida}
+                onChange={(e) => handleChange('saida', e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              Salvar Alterações
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function AjusteModal({
   open,
   onOpenChange,
@@ -234,6 +356,12 @@ export default function EspelhoPonto() {
 
   const [ajusteModal, setAjusteModal] = useState(false)
   const [ajusteData, setAjusteData] = useState({ data_ponto: '', tipo_ponto: '' })
+
+  const [adminEditModal, setAdminEditModal] = useState(false)
+  const [adminEditData, setAdminEditData] = useState<{ data_ponto: string; record: any }>({
+    data_ponto: '',
+    record: null,
+  })
 
   const isManagerOrAdmin = profile?.access_level === 'total' || profile?.access_level === 'gerencia'
 
@@ -380,9 +508,129 @@ export default function EspelhoPonto() {
   const totalAccumulated =
     rowsWithBalance.length > 0 ? rowsWithBalance[0].horas_acumuladas_linha : 0
 
-  function openAjusteModal(data_ponto: string, tipo_ponto: string) {
-    setAjusteData({ data_ponto, tipo_ponto })
-    setAjusteModal(true)
+  function openActionModal(data_ponto: string, field: string = 'entrada', rowRecord?: any) {
+    if (isManagerOrAdmin) {
+      const rec = rowRecord || records.find((r) => r.data === data_ponto)
+      setAdminEditData({ data_ponto, record: rec })
+      setAdminEditModal(true)
+    } else {
+      setAjusteData({ data_ponto, tipo_ponto: field })
+      setAjusteModal(true)
+    }
+  }
+
+  async function handleAdminEditSubmit(form: any) {
+    const targetUserId = selectedUser === 'me' ? user?.id : selectedUser
+    if (!targetUserId) return
+
+    const parseTime = (t: string) => {
+      if (!t) return null
+      const [h, m] = t.split(':').map(Number)
+      return h * 60 + m
+    }
+
+    let horas_calculadas: number | null = null
+    const m1 = parseTime(form.entrada)
+    const m2 = parseTime(form.saida_almoco)
+    const m3 = parseTime(form.retorno_almoco)
+    const m4 = parseTime(form.saida)
+
+    if (m1 !== null && m2 !== null && m3 !== null && m4 !== null) {
+      horas_calculadas = (m2 - m1 + (m4 - m3)) / 60
+    }
+
+    try {
+      let diarioId = adminEditData.record?.id
+      if (!diarioId) {
+        const { data, error } = await supabase
+          .from('pontos_diarios')
+          .insert({
+            profile_id: targetUserId,
+            criado_por: user!.id,
+            data: adminEditData.data_ponto,
+            entrada: form.entrada || null,
+            saida_almoco: form.saida_almoco || null,
+            retorno_almoco: form.retorno_almoco || null,
+            saida: form.saida || null,
+            horas_calculadas,
+            tipo_registro: 'manual',
+          })
+          .select()
+          .single()
+        if (error) throw error
+        diarioId = data.id
+      } else {
+        const { error } = await supabase
+          .from('pontos_diarios')
+          .update({
+            entrada: form.entrada || null,
+            saida_almoco: form.saida_almoco || null,
+            retorno_almoco: form.retorno_almoco || null,
+            saida: form.saida || null,
+            horas_calculadas,
+            tipo_registro: 'manual',
+          })
+          .eq('id', diarioId)
+        if (error) throw error
+      }
+
+      const colMap = {
+        entrada: 'entrada',
+        saida_almoco: 'almoço_saída',
+        retorno_almoco: 'almoço_retorno',
+        saida: 'saída',
+      }
+
+      for (const [key, tipoPonto] of Object.entries(colMap)) {
+        const horario = form[key as keyof typeof form]
+        if (horario) {
+          const { data: existing } = await supabase
+            .from('pontos')
+            .select('id')
+            .eq('profile_id', targetUserId)
+            .eq('data', adminEditData.data_ponto)
+            .eq('tipo_ponto', tipoPonto)
+            .maybeSingle()
+
+          if (existing) {
+            await supabase
+              .from('pontos')
+              .update({ horario, tipo_registro: 'manual' })
+              .eq('id', existing.id)
+          } else {
+            await supabase.from('pontos').insert({
+              profile_id: targetUserId,
+              criado_por: user!.id,
+              data: adminEditData.data_ponto,
+              data_hora: new Date().toISOString(),
+              tipo_ponto: tipoPonto,
+              horario,
+              tipo_registro: 'manual',
+            })
+          }
+        } else {
+          await supabase
+            .from('pontos')
+            .delete()
+            .eq('profile_id', targetUserId)
+            .eq('data', adminEditData.data_ponto)
+            .eq('tipo_ponto', tipoPonto)
+        }
+      }
+
+      toast({
+        title: 'Ponto ajustado com sucesso',
+        className: 'bg-emerald-50 text-emerald-900 border-emerald-200',
+      })
+      setAdminEditModal(false)
+      fetchRecords()
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao salvar ajuste',
+        description: err.message,
+      })
+    }
   }
 
   async function handleAjusteSubmit(form: any) {
@@ -412,19 +660,11 @@ export default function EspelhoPonto() {
     const value = row[field]
     const isManual = manualPointsMap[row.data]?.[field]
 
-    if (value) {
-      return (
-        <span className={isManual ? 'text-blue-600 font-semibold' : 'text-muted-foreground'}>
-          {value}
-        </span>
-      )
-    }
-
     const hasPending = ajustesPendentes.some(
       (a) => a.data_ponto === row.data && a.tipo_ponto === field,
     )
 
-    if (hasPending) {
+    if (hasPending && !value) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -438,16 +678,28 @@ export default function EspelhoPonto() {
     }
 
     return (
-      <span className="flex items-center gap-1 text-muted-foreground group">
-        --:--
-        <button
-          type="button"
-          title="Solicitar Ajuste"
-          className="text-muted-foreground/40 hover:text-primary transition-colors disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
-          onClick={() => openAjusteModal(row.data, field)}
+      <span className="flex items-center gap-1 group">
+        <span
+          className={cn(
+            isManual
+              ? 'text-blue-600 font-semibold'
+              : value
+                ? 'text-muted-foreground'
+                : 'text-muted-foreground',
+          )}
         >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
+          {value || '--:--'}
+        </span>
+        {(!value || isManagerOrAdmin) && !hasPending && (
+          <button
+            type="button"
+            title={isManagerOrAdmin ? 'Editar Ponto' : 'Solicitar Ajuste'}
+            className="text-muted-foreground/40 hover:text-primary transition-colors disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
+            onClick={() => openActionModal(row.data, field, row)}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
       </span>
     )
   }
@@ -464,11 +716,11 @@ export default function EspelhoPonto() {
         <span className="text-muted-foreground block text-xs">{label}</span>
         <span className={`font-medium flex items-center gap-2 ${isManual ? 'text-blue-600' : ''}`}>
           {value || '--:--'}
-          {!value && !hasPending && (
+          {(!value || isManagerOrAdmin) && !hasPending && (
             <button
               type="button"
               className="text-muted-foreground hover:text-primary"
-              onClick={() => openAjusteModal(row.data, field)}
+              onClick={() => openActionModal(row.data, field, row)}
             >
               <Pencil className="w-3.5 h-3.5" />
             </button>
@@ -640,7 +892,7 @@ export default function EspelhoPonto() {
                             isCurrentMonth && feriado && 'bg-orange-50/30',
                             'hover:bg-muted/30',
                           )}
-                          onClick={() => openAjusteModal(dateStr, 'entrada')}
+                          onClick={() => openActionModal(dateStr, 'entrada', record)}
                         >
                           <div className="flex justify-between items-start">
                             <span
@@ -686,7 +938,7 @@ export default function EspelhoPonto() {
                                         className="flex justify-between items-center group/item"
                                         onClick={(e) => {
                                           e.stopPropagation()
-                                          openAjusteModal(dateStr, field)
+                                          openActionModal(dateStr, field, record)
                                         }}
                                       >
                                         <span className="text-muted-foreground">
@@ -811,6 +1063,13 @@ export default function EspelhoPonto() {
         dataPonto={ajusteData.data_ponto}
         tipoPonto={ajusteData.tipo_ponto}
         onSubmit={handleAjusteSubmit}
+      />
+      <AdminEditModal
+        open={adminEditModal}
+        onOpenChange={setAdminEditModal}
+        dataPonto={adminEditData.data_ponto}
+        record={adminEditData.record}
+        onSubmit={handleAdminEditSubmit}
       />
     </div>
   )

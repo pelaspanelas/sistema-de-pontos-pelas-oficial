@@ -320,6 +320,13 @@ export default function Ponto() {
           title: 'Acesso Negado',
           description: 'Fora do horário permitido',
         })
+      } else if (err.message === 'LIMITE_SAIDA_EXCEDIDO') {
+        toast({
+          variant: 'destructive',
+          title: 'Limite Excedido',
+          description:
+            'O limite de 15 minutos para registrar a saída foi excedido. Solicite um ajuste manual ou contate seu supervisor.',
+        })
       } else {
         toast({
           variant: 'destructive',

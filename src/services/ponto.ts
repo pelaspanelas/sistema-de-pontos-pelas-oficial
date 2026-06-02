@@ -77,9 +77,9 @@ export async function registrarPonto({
           const expectedTime = eh * 60 + em
           const diff = actualTime - expectedTime
 
-          if (diff > 20) {
-            throw new Error('FORA_DO_HORARIO_PERMITIDO')
-          } else if (diff > 5 && diff <= 20) {
+          if (diff > 15) {
+            throw new Error('LIMITE_SAIDA_EXCEDIDO')
+          } else if (diff > 5 && diff <= 15) {
             statusValidacao = `aviso_atrasado:${diff}`
             toastMsg = 'Ponto registrado após o horário'
             toastVariant = 'warning'
