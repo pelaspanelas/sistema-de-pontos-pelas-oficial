@@ -15,6 +15,7 @@ import NotFound from './pages/NotFound'
 import Tarefas from './pages/Tarefas'
 import Desempenho from './pages/Desempenho'
 import FolhaPagamento from './pages/FolhaPagamento'
+import Ferias from './pages/Ferias'
 import FolhaPagamentoDetalhes from './pages/FolhaPagamentoDetalhes'
 import Feriados from './pages/Feriados'
 
@@ -132,7 +133,7 @@ const App = () => (
               path="/ferias"
               element={
                 <PermissionGuard permission="operacional">
-                  <Navigate to="/espelho-ponto" replace />
+                  <Ferias />
                 </PermissionGuard>
               }
             />

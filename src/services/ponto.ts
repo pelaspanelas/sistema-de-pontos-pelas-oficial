@@ -43,6 +43,19 @@ export async function registrarPonto({
     const hasBancoHoras = profile?.banco_horas_ativo === true
     const role = profile?.role
 
+    const { data: checkFerias } = await supabase
+      .from('ferias')
+      .select('id')
+      .eq('profile_id', profileId)
+      .lte('data_inicio', data)
+      .gte('data_fim', data)
+      .neq('status', 'cancelada')
+      .maybeSingle()
+
+    if (checkFerias) {
+      throw new Error('EM_FERIAS')
+    }
+
     if (hasBancoHoras) {
       toastMsg = 'Ponto registrado com banco de horas ativo'
     }

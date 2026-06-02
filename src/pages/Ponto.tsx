@@ -327,6 +327,12 @@ export default function Ponto() {
           description:
             'O limite de 15 minutos para registrar a saída foi excedido. Solicite um ajuste manual ou contate seu supervisor.',
         })
+      } else if (err.message === 'EM_FERIAS') {
+        toast({
+          variant: 'destructive',
+          title: 'Período de Férias',
+          description: 'Você não pode registrar ponto durante um período de férias ativo.',
+        })
       } else {
         toast({
           variant: 'destructive',

@@ -24,6 +24,8 @@ import {
   CalendarDays as CalendarDaysIcon,
   FileDown,
   Settings2,
+  ArrowUpDown,
+  Plane,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase/client'
@@ -39,6 +41,7 @@ import {
   isSameMonth,
   isToday,
   isWeekend,
+  isWithinInterval,
 } from 'date-fns'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -350,8 +353,13 @@ export default function EspelhoPonto() {
   )
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
   const [feriados, setFeriados] = useState<any[]>([])
+  const [feriasPeriodos, setFeriasPeriodos] = useState<any[]>([])
 
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
+    key: 'data',
+    direction: 'desc',
+  })
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth().toString())
   const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR)
   const [selectedUser, setSelectedUser] = useState<string>('me')
@@ -405,7 +413,7 @@ export default function EspelhoPonto() {
       const start = format(new Date(yearInt, monthInt, 1), 'yyyy-MM-dd')
       const end = format(endOfMonth(new Date(yearInt, monthInt, 1)), 'yyyy-MM-dd')
 
-      const [resPontosDiarios, resAjustes, resPontos, resFeriados] = await Promise.all([
+      const [resPontosDiarios, resAjustes, resPontos, resFeriados, resFerias] = await Promise.all([
         supabase
           .from('pontos_diarios')
           .select('*')
@@ -427,12 +435,20 @@ export default function EspelhoPonto() {
           .gte('data', start)
           .lte('data', end),
         supabase.from('feriados').select('*').gte('data', start).lte('data', end),
+        supabase
+          .from('ferias')
+          .select('*')
+          .eq('profile_id', targetUserId)
+          .neq('status', 'cancelada')
+          .lte('data_inicio', end)
+          .gte('data_fim', start),
       ])
 
       if (resPontosDiarios.error) throw resPontosDiarios.error
       if (resAjustes.error) throw resAjustes.error
       if (resPontos.error) throw resPontos.error
       if (resFeriados.error) throw resFeriados.error
+      if (resFerias.error) throw resFerias.error
 
       const map: Record<string, Record<string, boolean>> = {}
       resPontos.data?.forEach((p) => {
@@ -478,6 +494,7 @@ export default function EspelhoPonto() {
       setRecords(fetchedRecords)
       setAjustesPendentes(resAjustes.data || [])
       setFeriados(resFeriados.data || [])
+      setFeriasPeriodos(resFerias.data || [])
 
       updates.forEach((u) => {
         supabase
@@ -506,6 +523,42 @@ export default function EspelhoPonto() {
     })
     return mapped.reverse()
   }, [records])
+
+  const sortedRows = useMemo(() => {
+    return [...rowsWithBalance].sort((a, b) => {
+      let aValue = a[sortConfig.key]
+      let bValue = b[sortConfig.key]
+
+      if (sortConfig.key === 'horas_calculadas' || sortConfig.key === 'horas_acumuladas_linha') {
+        aValue = Number(aValue) || 0
+        bValue = Number(bValue) || 0
+      } else if (sortConfig.key === 'data') {
+        aValue = new Date(aValue).getTime()
+        bValue = new Date(bValue).getTime()
+      } else {
+        aValue = aValue || ''
+        bValue = bValue || ''
+      }
+
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1
+      return 0
+    })
+  }, [rowsWithBalance, sortConfig])
+
+  const handleSort = (key: string) => {
+    setSortConfig((current) => ({
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }))
+  }
+
+  const isDiaDeFerias = (dataStr: string) => {
+    const dataDate = parseISO(dataStr)
+    return feriasPeriodos.some((f) =>
+      isWithinInterval(dataDate, { start: parseISO(f.data_inicio), end: parseISO(f.data_fim) }),
+    )
+  }
 
   const totalAccumulated =
     rowsWithBalance.length > 0 ? rowsWithBalance[0].horas_acumuladas_linha : 0
@@ -731,6 +784,15 @@ export default function EspelhoPonto() {
   const renderCell = (row: any, field: string) => {
     const value = row[field]
     const isManual = manualPointsMap[row.data]?.[field]
+    const isFerias = isDiaDeFerias(row.data)
+
+    if (isFerias && !value) {
+      return (
+        <span className="inline-flex items-center text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md text-xs font-medium gap-1">
+          <Plane className="w-3 h-3" /> Férias
+        </span>
+      )
+    }
 
     const hasPending = ajustesPendentes.some(
       (a) => a.data_ponto === row.data && a.tipo_ponto === field,
@@ -787,9 +849,21 @@ export default function EspelhoPonto() {
   const renderMobileCell = (row: any, field: string, label: string) => {
     const value = row[field]
     const isManual = manualPointsMap[row.data]?.[field]
+    const isFerias = isDiaDeFerias(row.data)
     const hasPending = ajustesPendentes.some(
       (a) => a.data_ponto === row.data && a.tipo_ponto === field,
     )
+
+    if (isFerias && !value) {
+      return (
+        <div>
+          <span className="text-muted-foreground block text-xs">{label}</span>
+          <span className="inline-flex items-center text-blue-600 bg-blue-50 px-2 py-0.5 mt-0.5 rounded-md text-xs font-medium gap-1">
+            <Plane className="w-3 h-3" /> Férias
+          </span>
+        </div>
+      )
+    }
 
     return (
       <div>
@@ -969,6 +1043,12 @@ export default function EspelhoPonto() {
                       const dateStr = format(day, 'yyyy-MM-dd')
                       const record = rowsWithBalance.find((r) => r.data === dateStr)
                       const feriado = feriados.find((f) => f.data === dateStr)
+                      const isFerias = feriasPeriodos.some((f) =>
+                        isWithinInterval(day, {
+                          start: parseISO(f.data_inicio),
+                          end: parseISO(f.data_fim),
+                        }),
+                      )
                       const isCurrentMonth = isSameMonth(day, baseDate)
                       const isWknd = isWeekend(day)
                       const isDayToday = isToday(day)
@@ -979,11 +1059,12 @@ export default function EspelhoPonto() {
                           className={cn(
                             'border-b border-r p-2 min-h-[120px] flex flex-col gap-1 transition-colors cursor-pointer group',
                             !isCurrentMonth && 'bg-muted/20 opacity-60',
-                            isCurrentMonth && isWknd && 'bg-muted/10',
-                            isCurrentMonth && feriado && 'bg-orange-50/30',
+                            isCurrentMonth && isWknd && !isFerias && 'bg-muted/10',
+                            isCurrentMonth && feriado && !isFerias && 'bg-orange-50/30',
+                            isCurrentMonth && isFerias && 'bg-blue-50/40',
                             'hover:bg-muted/30',
                           )}
-                          onClick={() => openActionModal(dateStr, 'entrada', record)}
+                          onClick={() => !isFerias && openActionModal(dateStr, 'entrada', record)}
                         >
                           <div className="flex justify-between items-start">
                             <span
@@ -996,14 +1077,21 @@ export default function EspelhoPonto() {
                             >
                               {format(day, 'd')}
                             </span>
-                            {feriado && isCurrentMonth && (
+                            {isFerias && isCurrentMonth ? (
+                              <span
+                                className="text-[10px] text-blue-700 font-semibold truncate max-w-[60px] bg-blue-100/80 px-1 py-0.5 rounded"
+                                title="Férias"
+                              >
+                                Férias
+                              </span>
+                            ) : feriado && isCurrentMonth ? (
                               <span
                                 className="text-[10px] text-orange-700 font-semibold truncate max-w-[60px] bg-orange-100/80 px-1 py-0.5 rounded"
                                 title={feriado.nome}
                               >
                                 {feriado.nome}
                               </span>
-                            )}
+                            ) : null}
                           </div>
 
                           <div className="mt-1 flex-1 flex flex-col justify-end">
@@ -1083,65 +1171,130 @@ export default function EspelhoPonto() {
                 <Table>
                   <TableHeader className="bg-muted/50">
                     <TableRow>
-                      <TableHead className="w-[120px]">Data</TableHead>
-                      <TableHead>Entrada</TableHead>
-                      <TableHead>Almoço</TableHead>
-                      <TableHead>Retorno</TableHead>
-                      <TableHead>Saída</TableHead>
-                      <TableHead>Total Hrs</TableHead>
-                      <TableHead className="text-right">Horas Acumuladas</TableHead>
+                      <TableHead
+                        className="w-[120px] cursor-pointer hover:bg-muted/80 transition-colors"
+                        onClick={() => handleSort('data')}
+                      >
+                        <div className="flex items-center gap-1">
+                          Data <ArrowUpDown className="w-3 h-3" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/80 transition-colors"
+                        onClick={() => handleSort('entrada')}
+                      >
+                        <div className="flex items-center gap-1">
+                          Entrada <ArrowUpDown className="w-3 h-3" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/80 transition-colors"
+                        onClick={() => handleSort('saida_almoco')}
+                      >
+                        <div className="flex items-center gap-1">
+                          Almoço <ArrowUpDown className="w-3 h-3" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/80 transition-colors"
+                        onClick={() => handleSort('retorno_almoco')}
+                      >
+                        <div className="flex items-center gap-1">
+                          Retorno <ArrowUpDown className="w-3 h-3" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/80 transition-colors"
+                        onClick={() => handleSort('saida')}
+                      >
+                        <div className="flex items-center gap-1">
+                          Saída <ArrowUpDown className="w-3 h-3" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer hover:bg-muted/80 transition-colors"
+                        onClick={() => handleSort('horas_calculadas')}
+                      >
+                        <div className="flex items-center gap-1">
+                          Total Hrs <ArrowUpDown className="w-3 h-3" />
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="text-right cursor-pointer hover:bg-muted/80 transition-colors"
+                        onClick={() => handleSort('horas_acumuladas_linha')}
+                      >
+                        <div className="flex items-center justify-end gap-1">
+                          Horas Acumuladas <ArrowUpDown className="w-3 h-3" />
+                        </div>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {rowsWithBalance.map((row) => (
-                      <TableRow key={row.id} className="hover:bg-muted/30">
-                        <TableCell className="font-medium">
-                          {format(parseISO(row.data), 'dd/MM/yyyy')}
-                        </TableCell>
-                        <TableCell>{renderCell(row, 'entrada')}</TableCell>
-                        <TableCell>{renderCell(row, 'saida_almoco')}</TableCell>
-                        <TableCell>{renderCell(row, 'retorno_almoco')}</TableCell>
-                        <TableCell>{renderCell(row, 'saida')}</TableCell>
-                        <TableCell className={`font-medium ${getHoursColor(row.horas_calculadas)}`}>
-                          {formatDecimalHours(row.horas_calculadas)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium text-foreground">
-                          {formatDecimalHours(row.horas_acumuladas_linha)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {sortedRows.map((row) => {
+                      const isFerias = isDiaDeFerias(row.data)
+                      return (
+                        <TableRow
+                          key={row.id}
+                          className={cn('hover:bg-muted/30', isFerias && 'bg-blue-50/30')}
+                        >
+                          <TableCell className="font-medium">
+                            {format(parseISO(row.data), 'dd/MM/yyyy')}
+                          </TableCell>
+                          <TableCell>{renderCell(row, 'entrada')}</TableCell>
+                          <TableCell>{renderCell(row, 'saida_almoco')}</TableCell>
+                          <TableCell>{renderCell(row, 'retorno_almoco')}</TableCell>
+                          <TableCell>{renderCell(row, 'saida')}</TableCell>
+                          <TableCell
+                            className={`font-medium ${getHoursColor(row.horas_calculadas)}`}
+                          >
+                            {formatDecimalHours(row.horas_calculadas)}
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-foreground">
+                            {formatDecimalHours(row.horas_acumuladas_linha)}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>
 
               <div className="md:hidden space-y-4">
-                {rowsWithBalance.map((row) => (
-                  <Card key={row.id} className="overflow-hidden">
-                    <div className="bg-muted/30 px-4 py-2 border-b flex justify-between items-center">
-                      <span className="font-semibold">
-                        {format(parseISO(row.data), 'dd/MM/yyyy')}
-                      </span>
-                      <span className="text-sm font-medium text-foreground">
-                        Acumulado: {formatDecimalHours(row.horas_acumuladas_linha)}
-                      </span>
-                    </div>
-                    <CardContent className="p-4 grid grid-cols-2 gap-y-3 text-sm">
-                      {renderMobileCell(row, 'entrada', 'Entrada')}
-                      {renderMobileCell(row, 'saida_almoco', 'Almoço')}
-                      {renderMobileCell(row, 'retorno_almoco', 'Retorno')}
-                      {renderMobileCell(row, 'saida', 'Saída')}
-
-                      <div className="col-span-2 pt-2 border-t mt-1 flex justify-between">
-                        <div>
-                          <span className="text-muted-foreground text-xs mr-2">Total Horas:</span>
-                          <span className={`font-semibold ${getHoursColor(row.horas_calculadas)}`}>
-                            {formatDecimalHours(row.horas_calculadas)}
-                          </span>
-                        </div>
+                {sortedRows.map((row) => {
+                  const isFerias = isDiaDeFerias(row.data)
+                  return (
+                    <Card
+                      key={row.id}
+                      className={cn('overflow-hidden', isFerias && 'border-blue-200 bg-blue-50/20')}
+                    >
+                      <div className="bg-muted/30 px-4 py-2 border-b flex justify-between items-center">
+                        <span className="font-semibold">
+                          {format(parseISO(row.data), 'dd/MM/yyyy')}
+                        </span>
+                        <span className="text-sm font-medium text-foreground">
+                          Acumulado: {formatDecimalHours(row.horas_acumuladas_linha)}
+                        </span>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      <CardContent className="p-4 grid grid-cols-2 gap-y-3 text-sm">
+                        {renderMobileCell(row, 'entrada', 'Entrada')}
+                        {renderMobileCell(row, 'saida_almoco', 'Almoço')}
+                        {renderMobileCell(row, 'retorno_almoco', 'Retorno')}
+                        {renderMobileCell(row, 'saida', 'Saída')}
+
+                        <div className="col-span-2 pt-2 border-t mt-1 flex justify-between">
+                          <div>
+                            <span className="text-muted-foreground text-xs mr-2">Total Horas:</span>
+                            <span
+                              className={`font-semibold ${getHoursColor(row.horas_calculadas)}`}
+                            >
+                              {formatDecimalHours(row.horas_calculadas)}
+                            </span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
             </>
           )}

@@ -95,6 +95,51 @@ export type Database = {
           },
         ]
       }
+      historico_alteracoes_ponto: {
+        Row: {
+          alterado_por: string
+          coluna_alterada: string
+          created_at: string
+          id: string
+          ponto_id: string | null
+          valor_anterior: string | null
+          valor_novo: string | null
+        }
+        Insert: {
+          alterado_por: string
+          coluna_alterada: string
+          created_at?: string
+          id?: string
+          ponto_id?: string | null
+          valor_anterior?: string | null
+          valor_novo?: string | null
+        }
+        Update: {
+          alterado_por?: string
+          coluna_alterada?: string
+          created_at?: string
+          id?: string
+          ponto_id?: string | null
+          valor_anterior?: string | null
+          valor_novo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'historico_alteracoes_ponto_alterado_por_fkey'
+            columns: ['alterado_por']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'historico_alteracoes_ponto_ponto_id_fkey'
+            columns: ['ponto_id']
+            isOneToOne: false
+            referencedRelation: 'pontos'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       informativos: {
         Row: {
           created_at: string
@@ -748,6 +793,14 @@ export const Constants = {
 //   data: date (not null)
 //   created_at: timestamp with time zone (not null, default: now())
 //   criado_por: uuid (nullable)
+// Table: historico_alteracoes_ponto
+//   id: uuid (not null, default: gen_random_uuid())
+//   ponto_id: uuid (nullable)
+//   alterado_por: uuid (not null)
+//   coluna_alterada: text (not null)
+//   valor_anterior: text (nullable)
+//   valor_novo: text (nullable)
+//   created_at: timestamp with time zone (not null, default: now())
 // Table: informativos
 //   id: uuid (not null, default: gen_random_uuid())
 //   titulo: text (not null)
@@ -865,6 +918,10 @@ export const Constants = {
 // Table: feriados
 //   FOREIGN KEY feriados_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES profiles(id) ON DELETE SET NULL
 //   PRIMARY KEY feriados_pkey: PRIMARY KEY (id)
+// Table: historico_alteracoes_ponto
+//   FOREIGN KEY historico_alteracoes_ponto_alterado_por_fkey: FOREIGN KEY (alterado_por) REFERENCES profiles(id) ON DELETE CASCADE
+//   PRIMARY KEY historico_alteracoes_ponto_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY historico_alteracoes_ponto_ponto_id_fkey: FOREIGN KEY (ponto_id) REFERENCES pontos(id) ON DELETE SET NULL
 // Table: informativos
 //   FOREIGN KEY informativos_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES auth.users(id) ON DELETE SET NULL
 //   PRIMARY KEY informativos_pkey: PRIMARY KEY (id)
@@ -918,6 +975,11 @@ export const Constants = {
 //   Policy "feriados_select" (SELECT, PERMISSIVE) roles={authenticated}
 //     USING: true
 //   Policy "feriados_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: is_manager_or_admin()
+// Table: historico_alteracoes_ponto
+//   Policy "historico_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: is_manager_or_admin()
+//   Policy "historico_select" (SELECT, PERMISSIVE) roles={authenticated}
 //     USING: is_manager_or_admin()
 // Table: informativos
 //   Policy "informativos_delete" (DELETE, PERMISSIVE) roles={authenticated}
