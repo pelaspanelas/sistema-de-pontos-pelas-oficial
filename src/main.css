@@ -184,4 +184,8 @@
     page-break-after: avoid;
     page-break-inside: avoid;
   }
+  .print-page-break {
+    page-break-after: always;
+    break-after: page;
+  }
 }

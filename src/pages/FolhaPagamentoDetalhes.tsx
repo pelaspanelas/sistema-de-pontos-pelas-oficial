@@ -52,6 +52,7 @@ import { format, parseISO } from 'date-fns'
 interface Profile {
   id: string
   name: string
+  email: string
   role: string
   cpf: string
   admission_date: string
@@ -87,6 +88,7 @@ export default function FolhaPagamentoDetalhes() {
   const [expectedHours, setExpectedHours] = useState(0)
   const [projectedDays, setProjectedDays] = useState(0)
   const [nextMonthInfo, setNextMonthInfo] = useState({ month: 1, year: 2024, name: '' })
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null)
 
   const [dailyVt, setDailyVt] = useState('')
   const [savingVt, setSavingVt] = useState(false)
@@ -110,17 +112,23 @@ export default function FolhaPagamentoDetalhes() {
   async function fetchData() {
     setLoading(true)
     try {
-      const { data: fechamento } = await supabase
-        .from('fechamento_mensal')
-        .select('id')
-        .eq('mes', month)
-        .eq('ano', year)
-        .maybeSingle()
+      const [{ data: fechamento }, { data: settings }] = await Promise.all([
+        supabase
+          .from('fechamento_mensal')
+          .select('id')
+          .eq('mes', month)
+          .eq('ano', year)
+          .maybeSingle(),
+        supabase.from('company_settings').select('logo_url').maybeSingle(),
+      ])
       setIsClosed(!!fechamento)
+      if (settings?.logo_url) setCompanyLogoUrl(settings.logo_url)
 
       const { data: profileData, error: profileErr } = await supabase
         .from('profiles')
-        .select('id, name, role, cpf, admission_date, base_salary, banco_horas_ativo, valor_vt')
+        .select(
+          'id, name, role, cpf, admission_date, base_salary, banco_horas_ativo, valor_vt, email',
+        )
         .eq('id', id)
         .single()
       if (profileErr) throw profileErr
@@ -391,8 +399,38 @@ export default function FolhaPagamentoDetalhes() {
     }
   }
 
+  const [sendingEmail, setSendingEmail] = useState(false)
+
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
+
+  async function handleSendEmail() {
+    if (!profile?.email) {
+      toast({
+        title: 'Erro',
+        description: 'Colaborador não possui email cadastrado.',
+        variant: 'destructive',
+      })
+      return
+    }
+    setSendingEmail(true)
+    try {
+      const { error } = await supabase.functions.invoke('send-payslip', {
+        body: {
+          email: profile.email,
+          month: monthName,
+          year: year,
+          details: { netPay, totalCredits, totalDebits },
+        },
+      })
+      if (error) throw error
+      toast({ title: 'Sucesso', description: 'Holerite enviado por email!' })
+    } catch (err) {
+      toast({ title: 'Erro', description: 'Falha ao enviar email.', variant: 'destructive' })
+    } finally {
+      setSendingEmail(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -438,10 +476,20 @@ export default function FolhaPagamentoDetalhes() {
               </p>
             </div>
           </div>
-          <Button variant="default" onClick={() => window.print()}>
-            <Printer className="h-4 w-4 mr-2" />
-            Gerar Holerite
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleSendEmail} disabled={sendingEmail}>
+              {sendingEmail ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Mail className="h-4 w-4 mr-2" />
+              )}
+              Enviar por Email
+            </Button>
+            <Button variant="default" onClick={() => window.print()}>
+              <Printer className="h-4 w-4 mr-2" />
+              Gerar Holerite
+            </Button>
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
@@ -809,115 +857,41 @@ export default function FolhaPagamentoDetalhes() {
         </Card>
       </div>
 
-      <div className="hidden print:block print:fixed print:inset-0 print:bg-white print:z-50 print:p-4 text-black font-sans w-full max-w-[210mm] mx-auto print:h-screen print:overflow-hidden">
-        <div className="border border-black p-3 mb-3">
-          <div className="flex justify-between items-center border-b border-black pb-2 mb-2">
-            <div>
-              <h1 className="text-lg font-bold uppercase tracking-tight">Pelas Panelas</h1>
-              <p className="text-[10px]">CNPJ: 00.000.000/0001-00</p>
-            </div>
-            <div className="text-right">
-              <h2 className="text-sm font-bold uppercase">Recibo de Pagamento de Salário</h2>
-              <p className="font-semibold text-xs">
-                Mês/Ano: {monthName} / {year}
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-12 gap-2 text-[10px]">
-            <div className="col-span-2">
-              <p className="text-gray-600 text-[9px]">Código</p>
-              <p className="font-bold">{profile.id.substring(0, 8)}</p>
-            </div>
-            <div className="col-span-5">
-              <p className="text-gray-600 text-[9px]">Nome do Funcionário</p>
-              <p className="font-bold truncate">{profile.name}</p>
-            </div>
-            <div className="col-span-3">
-              <p className="text-gray-600 text-[9px]">Função</p>
-              <p className="font-bold truncate">{profile.role || 'Não informada'}</p>
-            </div>
-            <div className="col-span-2">
-              <p className="text-gray-600 text-[9px]">CPF</p>
-              <p className="font-bold">{profile.cpf || 'Não informado'}</p>
-            </div>
-          </div>
-        </div>
-
-        <table className="w-full border-collapse border border-black mb-3 text-[10px]">
-          <thead>
-            <tr>
-              <th className="border-b border-black border-r py-1 px-2 text-left w-12">Cód</th>
-              <th className="border-b border-black border-r py-1 px-2 text-left">Descrição</th>
-              <th className="border-b border-black border-r py-1 px-2 text-right w-24">
-                Vencimentos
-              </th>
-              <th className="border-b border-black py-1 px-2 text-right w-24">Descontos</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="border-r border-black py-0.5 px-2">001</td>
-              <td className="border-r border-black py-0.5 px-2">Salário Base</td>
-              <td className="border-r border-black py-0.5 px-2 text-right">
-                {formatCurrency(profile.base_salary || 0)}
-              </td>
-              <td className="py-0.5 px-2 text-right"></td>
-            </tr>
-            {launches.map((l, idx) => (
-              <tr key={l.id}>
-                <td className="border-r border-black py-0.5 px-2">
-                  {(idx + 2).toString().padStart(3, '0')}
-                </td>
-                <td className="border-r border-black py-0.5 px-2 truncate max-w-[200px]">
-                  {l.descricao}
-                </td>
-                <td className="border-r border-black py-0.5 px-2 text-right">
-                  {l.categoria === 'credito' ? formatCurrency(l.valor) : ''}
-                </td>
-                <td className="py-0.5 px-2 text-right">
-                  {l.categoria === 'debito' ? formatCurrency(l.valor) : ''}
-                </td>
-              </tr>
-            ))}
-            {Array.from({ length: Math.max(0, 10 - launches.length) }).map((_, i) => (
-              <tr key={`empty-${i}`}>
-                <td className="border-r border-black py-0.5 px-2 h-4"></td>
-                <td className="border-r border-black py-0.5 px-2"></td>
-                <td className="border-r border-black py-0.5 px-2"></td>
-                <td className="py-0.5 px-2"></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div className="border border-black flex">
-          <div className="w-1/2 p-2 text-[9px] border-r border-black flex flex-col justify-between">
-            <p>DECLARO TER RECEBIDO A IMPORTÂNCIA LÍQUIDA DISCRIMINADA NESTE RECIBO.</p>
-            <div className="mt-8 text-center flex flex-col items-center">
-              <div className="w-3/4 border-t border-black mb-1"></div>
-              <p>Assinatura do Funcionário</p>
-              <p className="mt-1">Data: ___/___/_____</p>
-            </div>
-          </div>
-          <div className="w-1/2 flex flex-col">
-            <div className="flex border-b border-black flex-1">
-              <div className="w-1/2 p-1.5 border-r border-black">
-                <p className="text-gray-600 text-[9px] mb-0.5">Total de Vencimentos</p>
-                <p className="font-bold text-right text-[10px]">
-                  {formatCurrency((profile.base_salary || 0) + totalCredits)}
-                </p>
-              </div>
-              <div className="w-1/2 p-1.5">
-                <p className="text-gray-600 text-[9px] mb-0.5">Total de Descontos</p>
-                <p className="font-bold text-right text-[10px]">{formatCurrency(totalDebits)}</p>
-              </div>
-            </div>
-            <div className="p-2 flex justify-between items-center bg-gray-50">
-              <p className="font-bold text-[10px]">Valor Líquido:</p>
-              <p className="font-bold text-sm">{formatCurrency(netPay)}</p>
-            </div>
-          </div>
+      <div className="hidden print:block print:absolute print:inset-0 print:bg-white print:z-50 w-full overflow-visible">
+        <div className="print-page-break">
+          <PaySlipPrint
+            profile={{
+              id: profile.id,
+              name: profile.name,
+              role: profile.role,
+              cpf: profile.cpf,
+              base_salary: profile.base_salary,
+            }}
+            launches={launches}
+            monthName={monthName}
+            year={year}
+            totalCredits={totalCredits}
+            totalDebits={totalDebits}
+            netPay={netPay}
+            companyLogoUrl={companyLogoUrl}
+          />
+          {/* Render a duplicate so we fit 2 per page natively as per A5 layout */}
+          <PaySlipPrint
+            profile={{
+              id: profile.id,
+              name: profile.name,
+              role: profile.role,
+              cpf: profile.cpf,
+              base_salary: profile.base_salary,
+            }}
+            launches={launches}
+            monthName={monthName}
+            year={year}
+            totalCredits={totalCredits}
+            totalDebits={totalDebits}
+            netPay={netPay}
+            companyLogoUrl={companyLogoUrl}
+          />
         </div>
       </div>
     </>

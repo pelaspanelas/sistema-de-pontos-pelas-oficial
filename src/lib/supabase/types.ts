@@ -9,6 +9,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      company_settings: {
+        Row: {
+          created_at: string
+          id: string
+          logo_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ajuste_ponto: {
         Row: {
           aprovado_por: string | null
@@ -852,6 +873,11 @@ export const Constants = {
 // --- COLUMN TYPES (actual PostgreSQL types) ---
 // Use this to know the real database type when writing migrations.
 // "string" in TypeScript types above may be uuid, text, varchar, timestamptz, etc.
+// Table: company_settings
+//   id: uuid (not null, default: gen_random_uuid())
+//   logo_url: text (nullable)
+//   created_at: timestamp with time zone (not null, default: now())
+//   updated_at: timestamp with time zone (not null, default: now())
 // Table: ajuste_ponto
 //   id: uuid (not null, default: gen_random_uuid())
 //   usuario_id: uuid (not null)
@@ -1057,6 +1083,11 @@ export const Constants = {
 //   FOREIGN KEY tarefas_concluidas_tarefa_id_fkey: FOREIGN KEY (tarefa_id) REFERENCES tarefas(id) ON DELETE CASCADE
 
 // --- ROW LEVEL SECURITY POLICIES ---
+// Table: company_settings
+//   Policy "company_settings_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: true
+//   Policy "company_settings_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.access_level IN ('total', 'gerencia') ))
 // Table: ajuste_ponto
 //   Policy "ajuste_ponto_delete" (DELETE, PERMISSIVE) roles={authenticated}
 //     USING: is_manager_or_admin()
