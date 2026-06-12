@@ -123,6 +123,8 @@ export default function Desempenho() {
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  const [selectedTask, setSelectedTask] = useState<TarefaRow | null>(null)
+
   const months = useMemo(() => {
     const result = []
     for (let i = -6; i < 6; i++) {
@@ -349,7 +351,8 @@ export default function Desempenho() {
     }
   }
 
-  const confirmDelete = (conclusaoId: string) => {
+  const confirmDelete = (e: React.MouseEvent, conclusaoId: string) => {
+    e.stopPropagation()
     setTaskToDelete(conclusaoId)
     setDeleteConfirmOpen(true)
   }
@@ -429,12 +432,12 @@ export default function Desempenho() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <Card className="xl:col-span-2">
-          <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <CardHeader className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <CardTitle>Minhas Tarefas</CardTitle>
               <CardDescription>Acompanhe suas atividades do período</CardDescription>
             </div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full md:w-auto">
               <RadioGroup
                 value={dateFilter}
                 onValueChange={(val: any) => setDateFilter(val)}
@@ -443,24 +446,28 @@ export default function Desempenho() {
               >
                 <div className="flex items-center space-x-1">
                   <RadioGroupItem value="ontem" id="ontem" />
-                  <Label htmlFor="ontem" className="cursor-pointer">
+                  <Label htmlFor="ontem" className="cursor-pointer text-xs sm:text-sm">
                     Ontem
                   </Label>
                 </div>
                 <div className="flex items-center space-x-1">
                   <RadioGroupItem value="hoje" id="hoje" />
-                  <Label htmlFor="hoje" className="cursor-pointer">
+                  <Label htmlFor="hoje" className="cursor-pointer text-xs sm:text-sm">
                     Hoje
                   </Label>
                 </div>
                 <div className="flex items-center space-x-1">
                   <RadioGroupItem value="amanha" id="amanha" />
-                  <Label htmlFor="amanha" className="cursor-pointer">
+                  <Label htmlFor="amanha" className="cursor-pointer text-xs sm:text-sm">
                     Amanhã
                   </Label>
                 </div>
               </RadioGroup>
-              <Button onClick={() => setLivreModalOpen(true)} size="sm">
+              <Button
+                onClick={() => setLivreModalOpen(true)}
+                size="sm"
+                className="w-full sm:w-auto mt-2 sm:mt-0"
+              >
                 Adicionar Tarefa Livre
               </Button>
             </div>
@@ -480,99 +487,153 @@ export default function Desempenho() {
                 <p className="text-muted-foreground">Nenhuma tarefa para este período</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Tarefa</TableHead>
-                      <TableHead>Data</TableHead>
-                      {isManagerOrAdmin && selectedUser === 'todos' && (
-                        <TableHead>Responsável</TableHead>
-                      )}
-                      <TableHead>Quantidade/Meta</TableHead>
-                      <TableHead>Prioridade</TableHead>
-                      <TableHead className="w-[120px]">Status</TableHead>
-                      <TableHead className="w-[80px] text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tarefas.map((t) => {
-                      const isConcluida = t.status === 'concluida'
-                      const prio = t.prioridade ? PRIORITIES[t.prioridade] : null
-                      const rowKey = t.isLivre ? t.conclusao_id! : t.id
+              <>
+                <div className="md:hidden space-y-3">
+                  {tarefas.map((t) => {
+                    const isConcluida = t.status === 'concluida'
+                    const prio = t.prioridade ? PRIORITIES[t.prioridade] : null
+                    const rowKey = t.isLivre ? t.conclusao_id! : t.id
 
-                      return (
-                        <TableRow key={rowKey}>
-                          <TableCell className="font-medium min-w-[200px]">
-                            <div className="flex items-start space-x-2">
+                    return (
+                      <Card
+                        key={rowKey}
+                        className={`cursor-pointer transition-colors hover:bg-muted/50 ${isConcluida ? 'opacity-70' : ''}`}
+                        onClick={() => setSelectedTask(t)}
+                      >
+                        <CardContent className="p-4 flex flex-col gap-3">
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="font-semibold leading-tight line-clamp-2 flex-1 flex items-start gap-2">
                               {t.isLivre && (
-                                <StickyNote className="h-4 w-4 mt-1 text-muted-foreground shrink-0" />
+                                <StickyNote className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                               )}
-                              <div className="flex flex-col space-y-1">
-                                <span>{t.titulo}</span>
-                                {t.descricao && (
-                                  <span className="text-xs text-muted-foreground line-clamp-2">
-                                    {t.descricao}
-                                  </span>
-                                )}
-                              </div>
+                              {t.titulo}
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            {format(new Date(t.data + 'T00:00:00'), 'dd/MM/yyyy')}
-                          </TableCell>
-                          {isManagerOrAdmin && selectedUser === 'todos' && (
-                            <TableCell>{t.responsavel?.name || '-'}</TableCell>
-                          )}
-                          <TableCell>{t.quantidade_meta}</TableCell>
-                          <TableCell>
-                            {prio ? (
-                              <Badge variant="secondary" className={prio.color}>
+                            {prio && (
+                              <Badge
+                                variant="secondary"
+                                className={`shrink-0 text-[10px] ${prio.color}`}
+                              >
                                 {prio.label}
                               </Badge>
-                            ) : (
-                              <span className="text-muted-foreground">--</span>
                             )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`task-${rowKey}`}
-                                checked={isConcluida}
-                                disabled={processing === rowKey}
-                                onCheckedChange={() => toggleStatus(t)}
-                              />
-                              <label
-                                htmlFor={`task-${rowKey}`}
-                                className="text-sm font-medium leading-none cursor-pointer"
-                              >
-                                {isConcluida ? 'Concluída' : 'Pendente'}
-                              </label>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {t.isLivre ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                onClick={() => confirmDelete(t.conclusao_id!)}
-                                disabled={processing === rowKey}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            ) : (
-                              <Button variant="ghost" size="sm" disabled>
-                                -
-                              </Button>
+                          </div>
+
+                          <div className="flex justify-between items-center text-xs text-muted-foreground">
+                            <span>{format(new Date(t.data + 'T00:00:00'), 'dd/MM/yyyy')}</span>
+                            <span
+                              className={
+                                isConcluida
+                                  ? 'text-green-600 font-medium'
+                                  : 'text-orange-500 font-medium'
+                              }
+                            >
+                              {isConcluida ? 'Concluída' : 'Pendente'}
+                            </span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+
+                <div className="hidden md:block overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tarefa</TableHead>
+                        <TableHead>Data</TableHead>
+                        {isManagerOrAdmin && selectedUser === 'todos' && (
+                          <TableHead>Responsável</TableHead>
+                        )}
+                        <TableHead>Quantidade/Meta</TableHead>
+                        <TableHead>Prioridade</TableHead>
+                        <TableHead className="w-[120px]">Status</TableHead>
+                        <TableHead className="w-[80px] text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tarefas.map((t) => {
+                        const isConcluida = t.status === 'concluida'
+                        const prio = t.prioridade ? PRIORITIES[t.prioridade] : null
+                        const rowKey = t.isLivre ? t.conclusao_id! : t.id
+
+                        return (
+                          <TableRow
+                            key={rowKey}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => setSelectedTask(t)}
+                          >
+                            <TableCell className="font-medium min-w-[200px]">
+                              <div className="flex items-start space-x-2">
+                                {t.isLivre && (
+                                  <StickyNote className="h-4 w-4 mt-1 text-muted-foreground shrink-0" />
+                                )}
+                                <div className="flex flex-col space-y-1">
+                                  <span>{t.titulo}</span>
+                                  {t.descricao && (
+                                    <span className="text-xs text-muted-foreground line-clamp-2">
+                                      {t.descricao}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {format(new Date(t.data + 'T00:00:00'), 'dd/MM/yyyy')}
+                            </TableCell>
+                            {isManagerOrAdmin && selectedUser === 'todos' && (
+                              <TableCell>{t.responsavel?.name || '-'}</TableCell>
                             )}
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
+                            <TableCell>{t.quantidade_meta}</TableCell>
+                            <TableCell>
+                              {prio ? (
+                                <Badge variant="secondary" className={prio.color}>
+                                  {prio.label}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground">--</span>
+                              )}
+                            </TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`task-${rowKey}`}
+                                  checked={isConcluida}
+                                  disabled={processing === rowKey}
+                                  onCheckedChange={() => toggleStatus(t)}
+                                />
+                                <label
+                                  htmlFor={`task-${rowKey}`}
+                                  className="text-sm font-medium leading-none cursor-pointer"
+                                >
+                                  {isConcluida ? 'Concluída' : 'Pendente'}
+                                </label>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {t.isLivre ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                  onClick={(e) => confirmDelete(e, t.conclusao_id!)}
+                                  disabled={processing === rowKey}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              ) : (
+                                <Button variant="ghost" size="sm" disabled>
+                                  -
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
@@ -693,6 +754,95 @@ export default function Desempenho() {
               Deletar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedTask} onOpenChange={(open) => !open && setSelectedTask(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          {selectedTask && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-start gap-2">
+                  {selectedTask.isLivre && (
+                    <StickyNote className="h-5 w-5 mt-0.5 text-muted-foreground shrink-0" />
+                  )}
+                  {selectedTask.titulo}
+                </DialogTitle>
+                <DialogDescription>
+                  Data da Tarefa:{' '}
+                  {selectedTask.data &&
+                    format(new Date(selectedTask.data + 'T00:00:00'), 'dd/MM/yyyy')}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4 space-y-4 text-sm">
+                {selectedTask.descricao && (
+                  <div>
+                    <strong className="block text-muted-foreground mb-1">Descrição</strong>
+                    <p className="leading-relaxed bg-muted/30 p-3 rounded-md">
+                      {selectedTask.descricao}
+                    </p>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <strong className="block text-muted-foreground mb-1">Prioridade</strong>
+                    {selectedTask.prioridade ? (
+                      <Badge
+                        variant="secondary"
+                        className={PRIORITIES[selectedTask.prioridade]?.color}
+                      >
+                        {PRIORITIES[selectedTask.prioridade]?.label}
+                      </Badge>
+                    ) : (
+                      '-'
+                    )}
+                  </div>
+                  <div>
+                    <strong className="block text-muted-foreground mb-1">Status Atual</strong>
+                    <Badge
+                      variant="outline"
+                      className={
+                        selectedTask.status === 'concluida'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-orange-100 text-orange-800'
+                      }
+                    >
+                      {selectedTask.status === 'concluida' ? 'Concluída' : 'Pendente'}
+                    </Badge>
+                  </div>
+                </div>
+                <div>
+                  <strong className="block text-muted-foreground mb-1">Meta / Quantidade</strong>
+                  <p className="font-medium text-lg">{selectedTask.quantidade_meta}</p>
+                </div>
+              </div>
+              <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">
+                <Button variant="outline" onClick={() => setSelectedTask(null)}>
+                  Fechar
+                </Button>
+                <Button
+                  variant={selectedTask.status === 'concluida' ? 'secondary' : 'default'}
+                  onClick={() => {
+                    toggleStatus(selectedTask)
+                    setSelectedTask(null)
+                  }}
+                  disabled={
+                    processing ===
+                    (selectedTask.isLivre ? selectedTask.conclusao_id : selectedTask.id)
+                  }
+                  className={
+                    selectedTask.status === 'concluida'
+                      ? 'text-destructive'
+                      : 'bg-green-600 hover:bg-green-700'
+                  }
+                >
+                  {selectedTask.status === 'concluida'
+                    ? 'Desmarcar Conclusão'
+                    : 'Marcar como Concluída'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

@@ -263,6 +263,7 @@ export type Database = {
       }
       pontos: {
         Row: {
+          alerta_visualizado: boolean | null
           created_at: string
           criado_por: string | null
           data: string
@@ -281,6 +282,7 @@ export type Database = {
           wifi_conectado: boolean | null
         }
         Insert: {
+          alerta_visualizado?: boolean | null
           created_at?: string
           criado_por?: string | null
           data: string
@@ -299,6 +301,7 @@ export type Database = {
           wifi_conectado?: boolean | null
         }
         Update: {
+          alerta_visualizado?: boolean | null
           created_at?: string
           criado_por?: string | null
           data?: string
@@ -888,6 +891,7 @@ export const Constants = {
 //   updated_at: timestamp with time zone (not null, default: now())
 //   criado_por: uuid (nullable)
 //   tipo_registro: text (nullable, default: 'automático'::text)
+//   alerta_visualizado: boolean (nullable, default: false)
 // Table: pontos_diarios
 //   id: uuid (not null, default: gen_random_uuid())
 //   profile_id: uuid (not null)

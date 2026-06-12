@@ -18,7 +18,8 @@ import {
 } from '@/components/ui/table'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
-import { DollarSign, Clock, Users, Loader2, ChevronRight } from 'lucide-react'
+import { DollarSign, Clock, Users, Loader2, ChevronRight, Lock, Unlock } from 'lucide-react'
+import { useAuth } from '@/hooks/use-auth'
 
 interface PayrollItem {
   profileId: string
@@ -53,8 +54,12 @@ export default function FolhaPagamento() {
   const [year, setYear] = useState(new Date().getFullYear().toString())
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<PayrollItem[]>([])
+  const [isClosed, setIsClosed] = useState(false)
+  const [closing, setClosing] = useState(false)
   const { toast } = useToast()
   const navigate = useNavigate()
+  const { profile } = useAuth()
+  const isManagerOrAdmin = profile?.access_level === 'total' || profile?.access_level === 'gerencia'
 
   useEffect(() => {
     fetchData()
@@ -66,6 +71,14 @@ export default function FolhaPagamento() {
       const startDate = `${year}-${month.padStart(2, '0')}-01`
       const endDateDate = new Date(Number(year), Number(month), 0)
       const endDate = `${year}-${month.padStart(2, '0')}-${endDateDate.getDate().toString().padStart(2, '0')}`
+
+      const { data: fechamento } = await supabase
+        .from('fechamento_mensal')
+        .select('id')
+        .eq('mes', Number(month))
+        .eq('ano', Number(year))
+        .maybeSingle()
+      setIsClosed(!!fechamento)
 
       const [
         { data: profiles, error: errProfiles },
@@ -153,11 +166,59 @@ export default function FolhaPagamento() {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
   }
 
+  async function handleCloseMonth() {
+    if (
+      !confirm(
+        `Deseja realmente finalizar o mês ${month}/${year}? Nenhuma alteração poderá ser feita após isso.`,
+      )
+    )
+      return
+    setClosing(true)
+    try {
+      const { error } = await supabase.from('fechamento_mensal').insert({
+        mes: Number(month),
+        ano: Number(year),
+        fechado_por: profile?.id,
+      })
+      if (error) throw error
+      toast({ title: 'Mês finalizado com sucesso!' })
+      setIsClosed(true)
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' })
+    } finally {
+      setClosing(false)
+    }
+  }
+
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0">
-        <h2 className="text-3xl font-bold tracking-tight">Folha de Pagamento</h2>
-        <div className="flex items-center space-x-2">
+    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 animate-fade-in">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <h2 className="text-3xl font-bold tracking-tight">Folha de Pagamento</h2>
+          {isClosed && (
+            <span className="flex items-center text-xs font-medium bg-rose-100 text-rose-700 px-2 py-1 rounded-full">
+              <Lock className="w-3 h-3 mr-1" /> Fechado
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {isManagerOrAdmin && (
+            <Button
+              variant={isClosed ? 'secondary' : 'default'}
+              onClick={handleCloseMonth}
+              disabled={isClosed || closing}
+              className={!isClosed ? 'bg-rose-600 hover:bg-rose-700' : ''}
+            >
+              {closing ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : isClosed ? (
+                <Lock className="w-4 h-4 mr-2" />
+              ) : (
+                <Unlock className="w-4 h-4 mr-2" />
+              )}
+              {isClosed ? 'Mês Finalizado' : 'Finalizar Mês'}
+            </Button>
+          )}
           <Select value={month} onValueChange={setMonth}>
             <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="Mês" />

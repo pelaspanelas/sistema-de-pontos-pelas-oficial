@@ -44,6 +44,8 @@ import {
   Banknote,
   Zap,
   Printer,
+  Pencil,
+  Lock,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
@@ -80,6 +82,7 @@ export default function FolhaPagamentoDetalhes() {
   const [launches, setLaunches] = useState<Launch[]>([])
   const [daysWorked, setDaysWorked] = useState(0)
   const [totalHours, setTotalHours] = useState(0)
+  const [isClosed, setIsClosed] = useState(false)
 
   const [expectedHours, setExpectedHours] = useState(0)
   const [projectedDays, setProjectedDays] = useState(0)
@@ -91,6 +94,8 @@ export default function FolhaPagamentoDetalhes() {
 
   const [isLaunchModalOpen, setIsLaunchModalOpen] = useState(false)
   const [savingLaunch, setSavingLaunch] = useState(false)
+  const [editingLaunchId, setEditingLaunchId] = useState<string | null>(null)
+
   const [launchForm, setLaunchForm] = useState({
     descricao: '',
     categoria: 'credito' as 'credito' | 'debito',
@@ -105,6 +110,14 @@ export default function FolhaPagamentoDetalhes() {
   async function fetchData() {
     setLoading(true)
     try {
+      const { data: fechamento } = await supabase
+        .from('fechamento_mensal')
+        .select('id')
+        .eq('mes', month)
+        .eq('ano', year)
+        .maybeSingle()
+      setIsClosed(!!fechamento)
+
       const { data: profileData, error: profileErr } = await supabase
         .from('profiles')
         .select('id, name, role, cpf, admission_date, base_salary, banco_horas_ativo, valor_vt')
@@ -220,6 +233,12 @@ export default function FolhaPagamentoDetalhes() {
   }
 
   async function handleAddVt() {
+    if (isClosed)
+      return toast({
+        title: 'Mês fechado',
+        description: 'Não é possível alterar.',
+        variant: 'destructive',
+      })
     if (!dailyVt || Number(dailyVt) <= 0 || projectedDays <= 0) return
     setSavingVt(true)
     try {
@@ -260,6 +279,12 @@ export default function FolhaPagamentoDetalhes() {
   }
 
   async function handleAdiantamento() {
+    if (isClosed)
+      return toast({
+        title: 'Mês fechado',
+        description: 'Não é possível alterar.',
+        variant: 'destructive',
+      })
     if (!profile?.base_salary) return
     setIsSavingAdiantamento(true)
     try {
@@ -299,28 +324,48 @@ export default function FolhaPagamentoDetalhes() {
 
   async function handleCreateLaunch(e: React.FormEvent) {
     e.preventDefault()
+    if (isClosed)
+      return toast({
+        title: 'Mês fechado',
+        description: 'Não é possível alterar.',
+        variant: 'destructive',
+      })
     setSavingLaunch(true)
     try {
-      const { error } = await supabase.from('lancamentos_folha').insert({
-        profile_id: id,
-        mes: month,
-        ano: year,
-        tipo: launchForm.tipo,
-        categoria: launchForm.categoria,
-        valor: Number(launchForm.valor),
-        descricao: launchForm.descricao,
-        criado_por: user?.id,
-      })
-      if (error) throw error
-
-      toast({ title: 'Sucesso', description: 'Lançamento adicionado com sucesso.' })
+      if (editingLaunchId) {
+        const { error } = await supabase
+          .from('lancamentos_folha')
+          .update({
+            tipo: launchForm.tipo,
+            categoria: launchForm.categoria,
+            valor: Number(launchForm.valor),
+            descricao: launchForm.descricao,
+          })
+          .eq('id', editingLaunchId)
+        if (error) throw error
+        toast({ title: 'Sucesso', description: 'Lançamento atualizado com sucesso.' })
+      } else {
+        const { error } = await supabase.from('lancamentos_folha').insert({
+          profile_id: id,
+          mes: month,
+          ano: year,
+          tipo: launchForm.tipo,
+          categoria: launchForm.categoria,
+          valor: Number(launchForm.valor),
+          descricao: launchForm.descricao,
+          criado_por: user?.id,
+        })
+        if (error) throw error
+        toast({ title: 'Sucesso', description: 'Lançamento adicionado com sucesso.' })
+      }
       setIsLaunchModalOpen(false)
       setLaunchForm({ descricao: '', categoria: 'credito', tipo: 'bonus', valor: '' })
+      setEditingLaunchId(null)
       fetchData()
     } catch (err) {
       toast({
         title: 'Erro',
-        description: 'Falha ao adicionar lançamento.',
+        description: 'Falha ao salvar lançamento.',
         variant: 'destructive',
       })
     } finally {
@@ -329,6 +374,12 @@ export default function FolhaPagamentoDetalhes() {
   }
 
   async function handleDeleteLaunch(launchId: string) {
+    if (isClosed)
+      return toast({
+        title: 'Mês fechado',
+        description: 'Não é possível alterar.',
+        variant: 'destructive',
+      })
     if (!confirm('Deseja realmente excluir este lançamento?')) return
     try {
       const { error } = await supabase.from('lancamentos_folha').delete().eq('id', launchId)
@@ -374,8 +425,15 @@ export default function FolhaPagamentoDetalhes() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h2 className="text-3xl font-bold tracking-tight">{profile.name}</h2>
-              <p className="text-muted-foreground capitalize">
+              <div className="flex items-center gap-3">
+                <h2 className="text-3xl font-bold tracking-tight">{profile.name}</h2>
+                {isClosed && (
+                  <span className="flex items-center text-xs font-medium bg-rose-100 text-rose-700 px-2 py-1 rounded-full">
+                    <Lock className="w-3 h-3 mr-1" /> Mês Fechado
+                  </span>
+                )}
+              </div>
+              <p className="text-muted-foreground capitalize mt-1">
                 {profile.role || 'Sem cargo'} • {monthName} de {year}
               </p>
             </div>
@@ -461,7 +519,9 @@ export default function FolhaPagamentoDetalhes() {
               <Button
                 variant="outline"
                 className="w-full"
+                disabled={isClosed}
                 onClick={() => {
+                  setEditingLaunchId(null)
                   setLaunchForm({
                     descricao: 'Pagamento de Horas Extras',
                     categoria: 'credito',
@@ -494,6 +554,7 @@ export default function FolhaPagamentoDetalhes() {
                   <Input
                     type="number"
                     min="0"
+                    disabled={isClosed}
                     value={projectedDays}
                     onChange={(e) => setProjectedDays(Number(e.target.value))}
                   />
@@ -504,6 +565,7 @@ export default function FolhaPagamentoDetalhes() {
                     type="number"
                     step="0.01"
                     min="0"
+                    disabled={isClosed}
                     value={dailyVt}
                     onChange={(e) => setDailyVt(e.target.value)}
                     placeholder="Ex: 15.50"
@@ -513,7 +575,7 @@ export default function FolhaPagamentoDetalhes() {
               <Button
                 className="w-full"
                 onClick={handleAddVt}
-                disabled={savingVt || !dailyVt || projectedDays === 0}
+                disabled={savingVt || !dailyVt || projectedDays === 0 || isClosed}
               >
                 {savingVt ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -552,7 +614,7 @@ export default function FolhaPagamentoDetalhes() {
                 variant="outline"
                 className="w-full text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
                 onClick={handleAdiantamento}
-                disabled={isSavingAdiantamento || !profile.base_salary}
+                disabled={isSavingAdiantamento || !profile.base_salary || isClosed}
               >
                 {isSavingAdiantamento ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -571,16 +633,25 @@ export default function FolhaPagamentoDetalhes() {
               <CardTitle>Lançamentos Manuais</CardTitle>
               <CardDescription>Gerencie créditos e débitos para este período.</CardDescription>
             </div>
+            {!isClosed && (
+              <Button
+                onClick={() => {
+                  setEditingLaunchId(null)
+                  setLaunchForm({ descricao: '', categoria: 'credito', tipo: 'bonus', valor: '' })
+                  setIsLaunchModalOpen(true)
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Lançamento
+              </Button>
+            )}
+
             <Dialog open={isLaunchModalOpen} onOpenChange={setIsLaunchModalOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Novo Lançamento
-                </Button>
-              </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Novo Lançamento Financeiro</DialogTitle>
+                  <DialogTitle>
+                    {editingLaunchId ? 'Editar Lançamento' : 'Novo Lançamento Financeiro'}
+                  </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleCreateLaunch} className="space-y-4 pt-4">
                   <div className="space-y-2">
@@ -642,6 +713,13 @@ export default function FolhaPagamentoDetalhes() {
                     />
                   </div>
                   <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsLaunchModalOpen(false)}
+                    >
+                      Cancelar
+                    </Button>
                     <Button type="submit" disabled={savingLaunch}>
                       {savingLaunch && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                       Salvar Lançamento
@@ -664,7 +742,7 @@ export default function FolhaPagamentoDetalhes() {
                     <TableHead>Tipo</TableHead>
                     <TableHead>Categoria</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
-                    <TableHead className="w-[80px]"></TableHead>
+                    <TableHead className="w-[100px] text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -692,13 +770,35 @@ export default function FolhaPagamentoDetalhes() {
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteLaunch(l.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-rose-500 hover:text-rose-600" />
-                        </Button>
+                        {!isClosed && (
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                setEditingLaunchId(l.id)
+                                setLaunchForm({
+                                  descricao: l.descricao,
+                                  categoria: l.categoria,
+                                  tipo: l.tipo,
+                                  valor: String(l.valor),
+                                })
+                                setIsLaunchModalOpen(true)
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50"
+                              onClick={() => handleDeleteLaunch(l.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

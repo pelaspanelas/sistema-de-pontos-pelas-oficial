@@ -4,7 +4,10 @@ import { AppSidebar } from './AppSidebar'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogOut, Upload, Trash2, Camera } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Badge } from '@/components/ui/badge'
+import { Bell } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -56,6 +59,65 @@ export default function Layout() {
   const [avatarModalOpen, setAvatarModalOpen] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [notifications, setNotifications] = useState<any[]>([])
+
+  useEffect(() => {
+    if (profile) {
+      fetchNotifications()
+      const interval = setInterval(fetchNotifications, 60000)
+      return () => clearInterval(interval)
+    }
+  }, [profile])
+
+  const fetchNotifications = async () => {
+    if (!profile) return
+    try {
+      const { data: infs } = await supabase
+        .from('informativos')
+        .select('*')
+        .or('lido.eq.false,lido.is.null')
+        .order('created_at', { ascending: false })
+
+      const filteredInfs = (infs || [])
+        .filter((inf) => {
+          if (!inf.destinatarios || inf.destinatarios.length === 0) return true
+          return inf.destinatarios.includes(profile.id)
+        })
+        .map((inf) => ({ ...inf, type: 'informativo' }))
+
+      const todayStr = new Date().toISOString().split('T')[0]
+      const { data: tasks } = await supabase
+        .from('tarefas')
+        .select('*, tarefas_concluidas(status)')
+        .eq('responsavel_id', profile.id)
+        .lte('data', todayStr)
+        .order('data', { ascending: false })
+
+      const pendingTasks = (tasks || [])
+        .filter((t) => {
+          const isConcluido = t.tarefas_concluidas?.some((tc: any) => tc.status === 'concluida')
+          return !isConcluido
+        })
+        .map((t) => ({ ...t, type: 'tarefa' }))
+
+      setNotifications([...filteredInfs, ...pendingTasks].slice(0, 10))
+    } catch (err) {
+      console.error('Error fetching notifications:', err)
+    }
+  }
+
+  const handleNotificationClick = async (notif: any) => {
+    if (notif.type === 'informativo') {
+      try {
+        await supabase.from('informativos').update({ lido: true }).eq('id', notif.id)
+        fetchNotifications()
+      } catch {
+        /* intentionally ignored */
+      }
+    }
+    navigate('/desempenho')
+  }
 
   const handleLogout = async () => {
     await signOut()
@@ -185,6 +247,53 @@ export default function Layout() {
                   </div>
                 )}
               </div>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="relative p-2 rounded-full hover:bg-muted transition-colors focus:outline-none">
+                    <Bell className="h-5 w-5 text-muted-foreground" />
+                    {notifications.length > 0 && (
+                      <Badge className="absolute top-1 right-1 h-4 w-4 flex items-center justify-center p-0 rounded-full bg-red-500 text-[10px] text-white border-2 border-background">
+                        {notifications.length}
+                      </Badge>
+                    )}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-0" align="end">
+                  <div className="p-3 border-b border-border/50 bg-muted/30">
+                    <h3 className="font-semibold text-sm">Notificações</h3>
+                  </div>
+                  <div className="max-h-[300px] overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">
+                        Nenhuma notificação no momento.
+                      </div>
+                    ) : (
+                      <div className="flex flex-col">
+                        {notifications.map((notif, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleNotificationClick(notif)}
+                            className="flex flex-col items-start p-3 border-b border-border/50 hover:bg-muted/50 transition-colors text-left"
+                          >
+                            <span className="text-xs font-semibold text-primary mb-1">
+                              {notif.type === 'informativo'
+                                ? '📢 Novo Informativo'
+                                : '📋 Nova Tarefa'}
+                            </span>
+                            <span className="text-sm font-medium line-clamp-1">{notif.titulo}</span>
+                            {notif.type === 'informativo' && (
+                              <span className="text-xs text-muted-foreground line-clamp-1 mt-1">
+                                {notif.mensagem}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
 
               {profile ? (
                 <button
