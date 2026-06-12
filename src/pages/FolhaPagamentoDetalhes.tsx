@@ -46,8 +46,10 @@ import {
   Printer,
   Pencil,
   Lock,
+  Mail,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
+import { PaySlipPrint } from '@/components/folha-pagamento/PaySlipPrint'
 
 interface Profile {
   id: string

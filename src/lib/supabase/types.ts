@@ -9,27 +9,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      company_settings: {
-        Row: {
-          created_at: string
-          id: string
-          logo_url: string | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          logo_url?: string | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          logo_url?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
       ajuste_ponto: {
         Row: {
           aprovado_por: string | null
@@ -83,6 +62,27 @@ export type Database = {
             referencedColumns: ['id']
           },
         ]
+      }
+      company_settings: {
+        Row: {
+          created_at: string
+          id: string
+          logo_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       fechamento_mensal: {
         Row: {
@@ -873,11 +873,6 @@ export const Constants = {
 // --- COLUMN TYPES (actual PostgreSQL types) ---
 // Use this to know the real database type when writing migrations.
 // "string" in TypeScript types above may be uuid, text, varchar, timestamptz, etc.
-// Table: company_settings
-//   id: uuid (not null, default: gen_random_uuid())
-//   logo_url: text (nullable)
-//   created_at: timestamp with time zone (not null, default: now())
-//   updated_at: timestamp with time zone (not null, default: now())
 // Table: ajuste_ponto
 //   id: uuid (not null, default: gen_random_uuid())
 //   usuario_id: uuid (not null)
@@ -889,6 +884,11 @@ export const Constants = {
 //   created_at: timestamp with time zone (nullable, default: now())
 //   updated_at: timestamp with time zone (nullable, default: now())
 //   tipo_ponto: text (nullable)
+// Table: company_settings
+//   id: uuid (not null, default: gen_random_uuid())
+//   logo_url: text (nullable)
+//   created_at: timestamp with time zone (not null, default: now())
+//   updated_at: timestamp with time zone (not null, default: now())
 // Table: fechamento_mensal
 //   id: uuid (not null, default: gen_random_uuid())
 //   mes: integer (not null)
@@ -1033,6 +1033,8 @@ export const Constants = {
 //   FOREIGN KEY ajuste_ponto_aprovado_por_fkey: FOREIGN KEY (aprovado_por) REFERENCES profiles(id) ON DELETE CASCADE
 //   PRIMARY KEY ajuste_ponto_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY ajuste_ponto_usuario_id_fkey: FOREIGN KEY (usuario_id) REFERENCES profiles(id) ON DELETE CASCADE
+// Table: company_settings
+//   PRIMARY KEY company_settings_pkey: PRIMARY KEY (id)
 // Table: fechamento_mensal
 //   FOREIGN KEY fechamento_mensal_fechado_por_fkey: FOREIGN KEY (fechado_por) REFERENCES profiles(id) ON DELETE SET NULL
 //   UNIQUE fechamento_mensal_mes_ano_key: UNIQUE (mes, ano)
@@ -1083,11 +1085,6 @@ export const Constants = {
 //   FOREIGN KEY tarefas_concluidas_tarefa_id_fkey: FOREIGN KEY (tarefa_id) REFERENCES tarefas(id) ON DELETE CASCADE
 
 // --- ROW LEVEL SECURITY POLICIES ---
-// Table: company_settings
-//   Policy "company_settings_select" (SELECT, PERMISSIVE) roles={authenticated}
-//     USING: true
-//   Policy "company_settings_update" (UPDATE, PERMISSIVE) roles={authenticated}
-//     USING: (EXISTS ( SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.access_level IN ('total', 'gerencia') ))
 // Table: ajuste_ponto
 //   Policy "ajuste_ponto_delete" (DELETE, PERMISSIVE) roles={authenticated}
 //     USING: is_manager_or_admin()
@@ -1097,6 +1094,11 @@ export const Constants = {
 //     USING: ((usuario_id = auth.uid()) OR is_manager_or_admin())
 //   Policy "ajuste_ponto_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: is_manager_or_admin()
+// Table: company_settings
+//   Policy "company_settings_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: true
+//   Policy "company_settings_update" (UPDATE, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND (profiles.access_level = ANY (ARRAY['total'::text, 'gerencia'::text])))))
 // Table: fechamento_mensal
 //   Policy "fechamento_mensal_delete" (DELETE, PERMISSIVE) roles={authenticated}
 //     USING: (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND (profiles.access_level = ANY (ARRAY['total'::text, 'gerencia'::text])))))
