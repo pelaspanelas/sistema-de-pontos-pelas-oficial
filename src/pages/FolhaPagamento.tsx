@@ -20,6 +20,7 @@ import { useNavigate } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
 import { DollarSign, Clock, Users, Loader2, ChevronRight, Lock, Unlock } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
+import { Button } from '@/components/ui/button'
 
 interface PayrollItem {
   profileId: string

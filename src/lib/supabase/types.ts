@@ -63,6 +63,38 @@ export type Database = {
           },
         ]
       }
+      fechamento_mensal: {
+        Row: {
+          ano: number
+          created_at: string
+          fechado_por: string | null
+          id: string
+          mes: number
+        }
+        Insert: {
+          ano: number
+          created_at?: string
+          fechado_por?: string | null
+          id?: string
+          mes: number
+        }
+        Update: {
+          ano?: number
+          created_at?: string
+          fechado_por?: string | null
+          id?: string
+          mes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'fechamento_mensal_fechado_por_fkey'
+            columns: ['fechado_por']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       feriados: {
         Row: {
           created_at: string
@@ -831,6 +863,12 @@ export const Constants = {
 //   created_at: timestamp with time zone (nullable, default: now())
 //   updated_at: timestamp with time zone (nullable, default: now())
 //   tipo_ponto: text (nullable)
+// Table: fechamento_mensal
+//   id: uuid (not null, default: gen_random_uuid())
+//   mes: integer (not null)
+//   ano: integer (not null)
+//   fechado_por: uuid (nullable)
+//   created_at: timestamp with time zone (not null, default: now())
 // Table: feriados
 //   id: uuid (not null, default: gen_random_uuid())
 //   nome: text (not null)
@@ -969,6 +1007,10 @@ export const Constants = {
 //   FOREIGN KEY ajuste_ponto_aprovado_por_fkey: FOREIGN KEY (aprovado_por) REFERENCES profiles(id) ON DELETE CASCADE
 //   PRIMARY KEY ajuste_ponto_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY ajuste_ponto_usuario_id_fkey: FOREIGN KEY (usuario_id) REFERENCES profiles(id) ON DELETE CASCADE
+// Table: fechamento_mensal
+//   FOREIGN KEY fechamento_mensal_fechado_por_fkey: FOREIGN KEY (fechado_por) REFERENCES profiles(id) ON DELETE SET NULL
+//   UNIQUE fechamento_mensal_mes_ano_key: UNIQUE (mes, ano)
+//   PRIMARY KEY fechamento_mensal_pkey: PRIMARY KEY (id)
 // Table: feriados
 //   FOREIGN KEY feriados_criado_por_fkey: FOREIGN KEY (criado_por) REFERENCES profiles(id) ON DELETE SET NULL
 //   PRIMARY KEY feriados_pkey: PRIMARY KEY (id)
@@ -1024,6 +1066,13 @@ export const Constants = {
 //     USING: ((usuario_id = auth.uid()) OR is_manager_or_admin())
 //   Policy "ajuste_ponto_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: is_manager_or_admin()
+// Table: fechamento_mensal
+//   Policy "fechamento_mensal_delete" (DELETE, PERMISSIVE) roles={authenticated}
+//     USING: (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND (profiles.access_level = ANY (ARRAY['total'::text, 'gerencia'::text])))))
+//   Policy "fechamento_mensal_insert" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: (EXISTS ( SELECT 1    FROM profiles   WHERE ((profiles.id = auth.uid()) AND (profiles.access_level = ANY (ARRAY['total'::text, 'gerencia'::text])))))
+//   Policy "fechamento_mensal_select" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: true
 // Table: feriados
 //   Policy "feriados_delete" (DELETE, PERMISSIVE) roles={authenticated}
 //     USING: is_manager_or_admin()
@@ -1293,6 +1342,8 @@ export const Constants = {
 //   CREATE INDEX ajuste_ponto_data_ponto_idx ON public.ajuste_ponto USING btree (data_ponto)
 //   CREATE INDEX ajuste_ponto_status_idx ON public.ajuste_ponto USING btree (status)
 //   CREATE INDEX ajuste_ponto_usuario_id_idx ON public.ajuste_ponto USING btree (usuario_id)
+// Table: fechamento_mensal
+//   CREATE UNIQUE INDEX fechamento_mensal_mes_ano_key ON public.fechamento_mensal USING btree (mes, ano)
 // Table: ferias
 //   CREATE INDEX ferias_profile_id_idx ON public.ferias USING btree (profile_id)
 // Table: pontos
