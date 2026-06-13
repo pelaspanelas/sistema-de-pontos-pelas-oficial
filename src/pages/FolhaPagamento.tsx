@@ -33,6 +33,8 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { PaySlipPrint } from '@/components/folha-pagamento/PaySlipPrint'
 import {
   Dialog,
@@ -91,6 +93,8 @@ export default function FolhaPagamento() {
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [holeriteCopies, setHoleriteCopies] = useState(2)
+  const [savingSettings, setSavingSettings] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { toast } = useToast()
@@ -117,11 +121,15 @@ export default function FolhaPagamento() {
           .eq('mes', Number(month))
           .eq('ano', Number(year))
           .maybeSingle(),
-        supabase.from('company_settings').select('logo_url').maybeSingle(),
+        supabase.from('company_settings').select('*').maybeSingle(),
       ])
 
       setIsClosed(!!fechamento)
-      if (settings?.logo_url) setCompanyLogoUrl(settings.logo_url)
+      if (settings) {
+        if (settings.logo_url) setCompanyLogoUrl(settings.logo_url)
+        if ((settings as any).holerite_copies !== undefined)
+          setHoleriteCopies((settings as any).holerite_copies)
+      }
 
       const [
         { data: profiles, error: errProfiles },
@@ -262,6 +270,31 @@ export default function FolhaPagamento() {
   const selectedData = data.filter((d) => selectedIds.has(d.profileId))
   const monthName = months[Number(month) - 1]
 
+  async function handleSaveSettings() {
+    setSavingSettings(true)
+    try {
+      const { error } = await supabase
+        .from('company_settings')
+        .update({ holerite_copies: holeriteCopies } as any)
+        .eq('id', '00000000-0000-0000-0000-000000000001')
+
+      if (error) {
+        const { error: insertErr } = await supabase.from('company_settings').insert({
+          id: '00000000-0000-0000-0000-000000000001',
+          holerite_copies: holeriteCopies,
+        } as any)
+        if (insertErr) throw insertErr
+      }
+
+      toast({ title: 'Configurações salvas com sucesso!' })
+      setSettingsOpen(false)
+    } catch (error) {
+      toast({ title: 'Erro ao salvar configurações', variant: 'destructive' })
+    } finally {
+      setSavingSettings(false)
+    }
+  }
+
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -360,6 +393,22 @@ export default function FolhaPagamento() {
                         )}
                         {companyLogoUrl ? 'Trocar Logo' : 'Fazer Upload'}
                       </Button>
+                    </div>
+
+                    <div className="space-y-3 pt-4 border-t">
+                      <Label>Quantidade de cópias por holerite</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={holeriteCopies}
+                          onChange={(e) => setHoleriteCopies(Number(e.target.value))}
+                        />
+                        <Button onClick={handleSaveSettings} disabled={savingSettings}>
+                          {savingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar'}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </DialogContent>
@@ -564,39 +613,25 @@ export default function FolhaPagamento() {
       <div className="hidden print:block print:absolute print:inset-0 print:bg-white print:z-50 w-full overflow-visible">
         {selectedData.map((item, index) => (
           <div key={`${item.profileId}-${index}`} className="print-page-break">
-            <PaySlipPrint
-              profile={{
-                id: item.profileId,
-                name: item.name,
-                role: item.role,
-                cpf: item.cpf,
-                base_salary: item.baseSalary,
-              }}
-              launches={item.launches}
-              monthName={monthName}
-              year={Number(year)}
-              totalCredits={item.totalCredits}
-              totalDebits={item.totalDebits}
-              netPay={item.calculatedPayment}
-              companyLogoUrl={companyLogoUrl}
-            />
-            {/* Duplicate to fit A4 page with 2 A5 slips */}
-            <PaySlipPrint
-              profile={{
-                id: item.profileId,
-                name: item.name,
-                role: item.role,
-                cpf: item.cpf,
-                base_salary: item.baseSalary,
-              }}
-              launches={item.launches}
-              monthName={monthName}
-              year={Number(year)}
-              totalCredits={item.totalCredits}
-              totalDebits={item.totalDebits}
-              netPay={item.calculatedPayment}
-              companyLogoUrl={companyLogoUrl}
-            />
+            {Array.from({ length: holeriteCopies }).map((_, i) => (
+              <PaySlipPrint
+                key={i}
+                profile={{
+                  id: item.profileId,
+                  name: item.name,
+                  role: item.role,
+                  cpf: item.cpf,
+                  base_salary: item.baseSalary,
+                }}
+                launches={item.launches}
+                monthName={monthName}
+                year={Number(year)}
+                totalCredits={item.totalCredits}
+                totalDebits={item.totalDebits}
+                netPay={item.calculatedPayment}
+                companyLogoUrl={companyLogoUrl}
+              />
+            ))}
           </div>
         ))}
       </div>

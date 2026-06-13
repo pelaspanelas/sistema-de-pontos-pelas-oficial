@@ -91,6 +91,7 @@ export default function FolhaPagamentoDetalhes() {
   const [projectedDays, setProjectedDays] = useState(0)
   const [nextMonthInfo, setNextMonthInfo] = useState({ month: 1, year: 2024, name: '' })
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null)
+  const [holeriteCopies, setHoleriteCopies] = useState(2)
 
   const [dailyVt, setDailyVt] = useState('')
   const [savingVt, setSavingVt] = useState(false)
@@ -121,10 +122,14 @@ export default function FolhaPagamentoDetalhes() {
           .eq('mes', month)
           .eq('ano', year)
           .maybeSingle(),
-        supabase.from('company_settings').select('logo_url').maybeSingle(),
+        supabase.from('company_settings').select('*').maybeSingle(),
       ])
       setIsClosed(!!fechamento)
-      if (settings?.logo_url) setCompanyLogoUrl(settings.logo_url)
+      if (settings) {
+        if (settings.logo_url) setCompanyLogoUrl(settings.logo_url)
+        if ((settings as any).holerite_copies !== undefined)
+          setHoleriteCopies((settings as any).holerite_copies)
+      }
 
       const { data: profileData, error: profileErr } = await supabase
         .from('profiles')
@@ -725,7 +730,15 @@ export default function FolhaPagamentoDetalhes() {
                     <Label>Tipo</Label>
                     <Select
                       value={launchForm.tipo}
-                      onValueChange={(v) => setLaunchForm({ ...launchForm, tipo: v })}
+                      onValueChange={(v) => {
+                        const updated = { ...launchForm, tipo: v }
+                        if (v === 'ferias_1_3' && profile?.base_salary) {
+                          updated.valor = (profile.base_salary / 3).toFixed(2)
+                          updated.descricao = '1/3 de Férias'
+                          updated.categoria = 'credito'
+                        }
+                        setLaunchForm(updated)
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -737,6 +750,7 @@ export default function FolhaPagamentoDetalhes() {
                         <SelectItem value="falta">Falta / Atraso</SelectItem>
                         <SelectItem value="consumo">Consumo</SelectItem>
                         <SelectItem value="hora_extra">Hora Extra</SelectItem>
+                        <SelectItem value="ferias_1_3">1/3 de Férias</SelectItem>
                         <SelectItem value="outro">Outro</SelectItem>
                       </SelectContent>
                     </Select>
@@ -861,39 +875,25 @@ export default function FolhaPagamentoDetalhes() {
 
       <div className="hidden print:block print:absolute print:inset-0 print:bg-white print:z-50 w-full overflow-visible">
         <div className="print-page-break">
-          <PaySlipPrint
-            profile={{
-              id: profile.id,
-              name: profile.name,
-              role: profile.role,
-              cpf: profile.cpf,
-              base_salary: profile.base_salary,
-            }}
-            launches={launches}
-            monthName={monthName}
-            year={year}
-            totalCredits={totalCredits}
-            totalDebits={totalDebits}
-            netPay={netPay}
-            companyLogoUrl={companyLogoUrl}
-          />
-          {/* Render a duplicate so we fit 2 per page natively as per A5 layout */}
-          <PaySlipPrint
-            profile={{
-              id: profile.id,
-              name: profile.name,
-              role: profile.role,
-              cpf: profile.cpf,
-              base_salary: profile.base_salary,
-            }}
-            launches={launches}
-            monthName={monthName}
-            year={year}
-            totalCredits={totalCredits}
-            totalDebits={totalDebits}
-            netPay={netPay}
-            companyLogoUrl={companyLogoUrl}
-          />
+          {Array.from({ length: holeriteCopies }).map((_, i) => (
+            <PaySlipPrint
+              key={i}
+              profile={{
+                id: profile.id,
+                name: profile.name,
+                role: profile.role,
+                cpf: profile.cpf,
+                base_salary: profile.base_salary,
+              }}
+              launches={launches}
+              monthName={monthName}
+              year={year}
+              totalCredits={totalCredits}
+              totalDebits={totalDebits}
+              netPay={netPay}
+              companyLogoUrl={companyLogoUrl}
+            />
+          ))}
         </div>
       </div>
     </>
