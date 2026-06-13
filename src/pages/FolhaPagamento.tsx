@@ -95,6 +95,8 @@ export default function FolhaPagamento() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [holeriteCopies, setHoleriteCopies] = useState(2)
   const [savingSettings, setSavingSettings] = useState(false)
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { toast } = useToast()
@@ -269,6 +271,33 @@ export default function FolhaPagamento() {
 
   const selectedData = data.filter((d) => selectedIds.has(d.profileId))
   const monthName = months[Number(month) - 1]
+
+  async function handleClearLaunches() {
+    setClearing(true)
+    try {
+      const selectedArray = Array.from(selectedIds)
+      const { error } = await supabase
+        .from('lancamentos_folha')
+        .delete()
+        .in('profile_id', selectedArray)
+        .eq('mes', Number(month))
+        .eq('ano', Number(year))
+
+      if (error) throw error
+
+      toast({ title: 'Lançamentos apagados com sucesso!' })
+      fetchData()
+      setConfirmClearOpen(false)
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao apagar lançamentos',
+        description: error.message,
+        variant: 'destructive',
+      })
+    } finally {
+      setClearing(false)
+    }
+  }
 
   async function handleSaveSettings() {
     setSavingSettings(true)
@@ -497,12 +526,49 @@ export default function FolhaPagamento() {
             {selectedIds.size > 0 ? `${selectedIds.size} selecionados` : ''}
           </p>
           {selectedIds.size > 0 && (
-            <Button onClick={() => window.print()} className="animate-fade-in-up">
-              <Printer className="w-4 h-4 mr-2" />
-              Imprimir Selecionados
-            </Button>
+            <div className="flex gap-2">
+              {isManagerOrAdmin && (
+                <Button
+                  variant="destructive"
+                  onClick={() => setConfirmClearOpen(true)}
+                  disabled={isClosed}
+                  className="animate-fade-in-up"
+                >
+                  Limpar Lançamentos
+                </Button>
+              )}
+              <Button onClick={() => window.print()} className="animate-fade-in-up">
+                <Printer className="w-4 h-4 mr-2" />
+                Imprimir Selecionados
+              </Button>
+            </div>
           )}
         </div>
+
+        <Dialog open={confirmClearOpen} onOpenChange={setConfirmClearOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Limpar Lançamentos</DialogTitle>
+              <DialogDescription>
+                Tem certeza que deseja apagar todos os lançamentos manuais dos funcionários
+                selecionados para este mês? Esta ação não pode ser desfeita.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => setConfirmClearOpen(false)}
+                disabled={clearing}
+              >
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={handleClearLaunches} disabled={clearing}>
+                {clearing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                Confirmar Exclusão
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {loading ? (
           <div className="flex flex-col items-center justify-center h-64 space-y-4">

@@ -66,18 +66,21 @@ export type Database = {
       company_settings: {
         Row: {
           created_at: string
+          holerite_copies: number | null
           id: string
           logo_url: string | null
           updated_at: string
         }
         Insert: {
           created_at?: string
+          holerite_copies?: number | null
           id?: string
           logo_url?: string | null
           updated_at?: string
         }
         Update: {
           created_at?: string
+          holerite_copies?: number | null
           id?: string
           logo_url?: string | null
           updated_at?: string
@@ -889,6 +892,7 @@ export const Constants = {
 //   logo_url: text (nullable)
 //   created_at: timestamp with time zone (not null, default: now())
 //   updated_at: timestamp with time zone (not null, default: now())
+//   holerite_copies: integer (nullable, default: 2)
 // Table: fechamento_mensal
 //   id: uuid (not null, default: gen_random_uuid())
 //   mes: integer (not null)

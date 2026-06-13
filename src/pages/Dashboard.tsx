@@ -33,6 +33,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { ManualPointModal } from '@/components/ponto/ManualPointModal'
 
 export default function Dashboard() {
   const { toast } = useToast()
@@ -400,9 +401,14 @@ export default function Dashboard() {
   return (
     <div className="flex flex-col gap-6 p-6">
       <Card className="bg-primary/5 border-primary/20">
-        <CardHeader>
-          <CardTitle className="text-2xl text-primary">Dashboard Principal</CardTitle>
-          <CardDescription>Resumo operacional e gestão de ponto da equipe</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-2xl text-primary">Dashboard Principal</CardTitle>
+            <CardDescription>Resumo operacional e gestão de ponto da equipe</CardDescription>
+          </div>
+          <div>
+            <ManualPointModal onSuccess={fetchData} />
+          </div>
         </CardHeader>
       </Card>
 
@@ -485,12 +491,13 @@ export default function Dashboard() {
 
       <div className="grid gap-6 md:grid-cols-3">
         <Card className="md:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
             <div>
               <CardTitle>Ajustes de Ponto Pendentes</CardTitle>
               <CardDescription>Gerencie as solicitações de ajuste de ponto</CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 items-center">
+              <ManualPointModal onSuccess={fetchData} />
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                 <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="Mês" />
