@@ -254,15 +254,37 @@ export default function FolhaPagamento() {
     return acc + vtLaunches.reduce((sum, l) => sum + l.valor, 0)
   }, 0)
 
-  const sumDiscounts = data.reduce((acc, curr) => acc + curr.totalDebits, 0)
+  const sumDiscounts = data.reduce((acc, curr) => {
+    const discountLaunches = curr.launches.filter((l) => {
+      if (l.categoria !== 'debito') return false
+      const desc = l.descricao.toLowerCase()
+      const tipo = l.tipo.toLowerCase()
+      return !(
+        desc.includes('adiantamento quinzenal de 40%') ||
+        tipo.includes('adiantamento quinzenal de 40%')
+      )
+    })
+    return acc + discountLaunches.reduce((sum, l) => sum + l.valor, 0)
+  }, 0)
 
   const sumOvertime = data.reduce((acc, curr) => {
-    const overtimeLaunches = curr.launches.filter(
-      (l) =>
-        l.categoria === 'credito' &&
-        (l.descricao.toLowerCase().includes('hora extra') ||
-          l.tipo.toLowerCase().includes('hora extra')),
-    )
+    const overtimeLaunches = curr.launches.filter((l) => {
+      if (l.categoria !== 'credito') return false
+      const desc = l.descricao.toLowerCase()
+      const tipo = l.tipo.toLowerCase()
+      return (
+        desc.includes('hora extra') ||
+        tipo.includes('hora extra') ||
+        desc.includes('bônus') ||
+        desc.includes('bonus') ||
+        desc.includes('premiação') ||
+        desc.includes('premiacao') ||
+        tipo.includes('bônus') ||
+        tipo.includes('bonus') ||
+        tipo.includes('premiação') ||
+        tipo.includes('premiacao')
+      )
+    })
     return acc + overtimeLaunches.reduce((sum, l) => sum + l.valor, 0)
   }, 0)
 
@@ -412,14 +434,9 @@ export default function FolhaPagamento() {
   return (
     <>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 animate-fade-in print:hidden">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-3">
             <h2 className="text-3xl font-bold tracking-tight">Folha de Pagamento</h2>
-            {isClosed && (
-              <span className="flex items-center text-xs font-medium bg-rose-100 text-rose-700 px-2 py-1 rounded-full">
-                <Lock className="w-3 h-3 mr-1" /> Fechado
-              </span>
-            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {isManagerOrAdmin && (
@@ -537,6 +554,31 @@ export default function FolhaPagamento() {
           </div>
         </div>
 
+        <div className="bg-primary/10 border border-primary/20 text-primary px-4 py-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="bg-primary/20 p-2 rounded-md">
+              <CalendarDays className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-medium opacity-80 uppercase tracking-wider">
+                Competência Atual
+              </p>
+              <h3 className="text-lg font-bold">
+                {monthName} de {year}
+              </h3>
+            </div>
+          </div>
+          {isClosed ? (
+            <div className="flex items-center text-sm font-medium bg-rose-100 text-rose-700 px-3 py-1.5 rounded-full border border-rose-200">
+              <Lock className="w-4 h-4 mr-1.5" /> Fechado
+            </div>
+          ) : (
+            <div className="flex items-center text-sm font-medium bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-full border border-emerald-200">
+              <Unlock className="w-4 h-4 mr-1.5" /> Em Aberto
+            </div>
+          )}
+        </div>
+
         <div className="grid gap-4 md:grid-cols-3 mb-6">
           <Card className="bg-primary text-primary-foreground">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -596,14 +638,16 @@ export default function FolhaPagamento() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Horas Extras</CardTitle>
+              <CardTitle className="text-sm font-medium">Horas Extras e Bônus</CardTitle>
               <TrendingUp className="h-4 w-4 text-emerald-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-emerald-600">
                 {formatCurrency(sumOvertime)}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Total de horas extras creditadas</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Total de horas extras e premiações
+              </p>
             </CardContent>
           </Card>
 
@@ -614,7 +658,9 @@ export default function FolhaPagamento() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-rose-600">{formatCurrency(sumDiscounts)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Total de débitos aplicados</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Débitos aplicados (exceto adiantamento 40%)
+              </p>
             </CardContent>
           </Card>
 
