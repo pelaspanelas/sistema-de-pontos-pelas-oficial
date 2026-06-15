@@ -30,6 +30,12 @@ import {
   Printer,
   Settings,
   Upload,
+  Bus,
+  TrendingDown,
+  TrendingUp,
+  CalendarDays,
+  Palmtree,
+  Wallet,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -50,6 +56,7 @@ interface Launch {
   descricao: string
   categoria: 'credito' | 'debito'
   valor: number
+  tipo: string
 }
 
 interface PayrollItem {
@@ -58,6 +65,7 @@ interface PayrollItem {
   role: string
   cpf: string
   baseSalary: number
+  valorVt: number
   totalCredits: number
   totalDebits: number
   totalHours: number
@@ -138,7 +146,10 @@ export default function FolhaPagamento() {
         { data: pontos, error: errPontos },
         { data: launches, error: errLaunches },
       ] = await Promise.all([
-        supabase.from('profiles').select('id, name, role, base_salary, cpf').eq('status', 'Ativo'),
+        supabase
+          .from('profiles')
+          .select('id, name, role, base_salary, cpf, valor_vt')
+          .eq('status', 'Ativo'),
         supabase
           .from('pontos_diarios')
           .select('profile_id, horas_calculadas')
@@ -170,6 +181,7 @@ export default function FolhaPagamento() {
           descricao: l.descricao,
           categoria: l.categoria as 'credito' | 'debito',
           valor: Number(l.valor) || 0,
+          tipo: l.tipo || '',
         })
       })
 
@@ -177,6 +189,7 @@ export default function FolhaPagamento() {
         .map((p) => {
           const totalHours = hoursByProfile[p.id] || 0
           const baseSalary = Number(p.base_salary) || 0
+          const valorVt = Number(p.valor_vt) || 0
           const userLaunches = launchesByProfile[p.id] || []
 
           let credits = 0
@@ -194,6 +207,7 @@ export default function FolhaPagamento() {
             role: p.role || 'Não definido',
             cpf: p.cpf || '',
             baseSalary,
+            valorVt,
             totalCredits: credits,
             totalDebits: debits,
             totalHours,
@@ -219,6 +233,21 @@ export default function FolhaPagamento() {
   const totalCost = data.reduce((acc, curr) => acc + curr.calculatedPayment, 0)
   const totalHours = data.reduce((acc, curr) => acc + curr.totalHours, 0)
   const totalEmployees = data.length
+
+  const sumBaseSalaries = data.reduce((acc, curr) => acc + curr.baseSalary, 0)
+  const sumVt = data.reduce((acc, curr) => acc + curr.valorVt, 0)
+  const sumDiscounts = data.reduce((acc, curr) => acc + curr.totalDebits, 0)
+  const sumOvertime = data.reduce((acc, curr) => {
+    const overtimeLaunches = curr.launches.filter(
+      (l) =>
+        l.categoria === 'credito' &&
+        (l.descricao.toLowerCase().includes('hora extra') ||
+          l.tipo.toLowerCase().includes('hora extra')),
+    )
+    return acc + overtimeLaunches.reduce((sum, l) => sum + l.valor, 0)
+  }, 0)
+  const provision13 = sumBaseSalaries / 12
+  const provisionVacation = sumBaseSalaries / 12 / 3
 
   function formatCurrency(val: number) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
@@ -488,15 +517,15 @@ export default function FolhaPagamento() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card>
+        <div className="grid gap-4 md:grid-cols-3 mb-6">
+          <Card className="bg-primary text-primary-foreground">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total da Folha</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <DollarSign className="h-4 w-4 opacity-75" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(totalCost)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Estimativa de custos do período</p>
+              <p className="text-xs opacity-75 mt-1">Estimativa de custos do período</p>
             </CardContent>
           </Card>
           <Card>
@@ -517,6 +546,79 @@ export default function FolhaPagamento() {
             <CardContent>
               <div className="text-2xl font-bold">{totalEmployees}</div>
               <p className="text-xs text-muted-foreground mt-1">Registrados neste período</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <h3 className="text-lg font-medium tracking-tight mb-4">Detalhamento Financeiro</h3>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Soma de Salários</CardTitle>
+              <Wallet className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(sumBaseSalaries)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Salários base do período</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Soma de VT</CardTitle>
+              <Bus className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(sumVt)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Vale transporte total projetado</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Horas Extras</CardTitle>
+              <TrendingUp className="h-4 w-4 text-emerald-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-emerald-600">
+                {formatCurrency(sumOvertime)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Total de horas extras creditadas</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Soma de Descontos</CardTitle>
+              <TrendingDown className="h-4 w-4 text-rose-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-rose-600">{formatCurrency(sumDiscounts)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Total de débitos aplicados</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">13º Salário Projetado</CardTitle>
+              <CalendarDays className="h-4 w-4 text-amber-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-amber-600">{formatCurrency(provision13)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Provisão mensal base</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Férias Projetadas</CardTitle>
+              <Palmtree className="h-4 w-4 text-sky-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-sky-600">
+                {formatCurrency(provisionVacation)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Provisão do terço de férias</p>
             </CardContent>
           </Card>
         </div>
