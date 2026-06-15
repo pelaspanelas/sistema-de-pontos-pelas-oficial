@@ -148,8 +148,7 @@ export default function FolhaPagamento() {
       ] = await Promise.all([
         supabase
           .from('profiles')
-          .select('id, name, role, base_salary, cpf, valor_vt')
-          .eq('status', 'Ativo'),
+          .select('id, name, role, base_salary, cpf, valor_vt, admission_date, status'),
         supabase
           .from('pontos_diarios')
           .select('profile_id, horas_calculadas')
@@ -185,7 +184,15 @@ export default function FolhaPagamento() {
         })
       })
 
-      const payroll: PayrollItem[] = (profiles || [])
+      const validProfiles = (profiles || []).filter((p) => {
+        if (p.status !== 'Ativo') return false
+        if (p.admission_date) {
+          return p.admission_date <= endDate
+        }
+        return true
+      })
+
+      const payroll: PayrollItem[] = validProfiles
         .map((p) => {
           const totalHours = hoursByProfile[p.id] || 0
           const baseSalary = Number(p.base_salary) || 0
@@ -235,8 +242,20 @@ export default function FolhaPagamento() {
   const totalEmployees = data.length
 
   const sumBaseSalaries = data.reduce((acc, curr) => acc + curr.baseSalary, 0)
-  const sumVt = data.reduce((acc, curr) => acc + curr.valorVt, 0)
+
+  const sumVt = data.reduce((acc, curr) => {
+    const vtLaunches = curr.launches.filter(
+      (l) =>
+        l.tipo.toLowerCase().includes('vale transporte') ||
+        l.tipo.toLowerCase() === 'vt' ||
+        l.descricao.toLowerCase().includes('vale transporte') ||
+        l.descricao.toLowerCase() === 'vt',
+    )
+    return acc + vtLaunches.reduce((sum, l) => sum + l.valor, 0)
+  }, 0)
+
   const sumDiscounts = data.reduce((acc, curr) => acc + curr.totalDebits, 0)
+
   const sumOvertime = data.reduce((acc, curr) => {
     const overtimeLaunches = curr.launches.filter(
       (l) =>
@@ -246,8 +265,9 @@ export default function FolhaPagamento() {
     )
     return acc + overtimeLaunches.reduce((sum, l) => sum + l.valor, 0)
   }, 0)
+
   const provision13 = sumBaseSalaries / 12
-  const provisionVacation = sumBaseSalaries / 12 / 3
+  const provisionVacation = provision13 / 3
 
   function formatCurrency(val: number) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
