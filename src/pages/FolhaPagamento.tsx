@@ -257,12 +257,7 @@ export default function FolhaPagamento() {
   const sumDiscounts = data.reduce((acc, curr) => {
     const discountLaunches = curr.launches.filter((l) => {
       if (l.categoria !== 'debito') return false
-      const desc = l.descricao.toLowerCase()
-      const tipo = l.tipo.toLowerCase()
-      return !(
-        desc.includes('adiantamento quinzenal de 40%') ||
-        tipo.includes('adiantamento quinzenal de 40%')
-      )
+      return l.tipo.toLowerCase() !== 'vale'
     })
     return acc + discountLaunches.reduce((sum, l) => sum + l.valor, 0)
   }, 0)
@@ -270,20 +265,8 @@ export default function FolhaPagamento() {
   const sumOvertime = data.reduce((acc, curr) => {
     const overtimeLaunches = curr.launches.filter((l) => {
       if (l.categoria !== 'credito') return false
-      const desc = l.descricao.toLowerCase()
       const tipo = l.tipo.toLowerCase()
-      return (
-        desc.includes('hora extra') ||
-        tipo.includes('hora extra') ||
-        desc.includes('bônus') ||
-        desc.includes('bonus') ||
-        desc.includes('premiação') ||
-        desc.includes('premiacao') ||
-        tipo.includes('bônus') ||
-        tipo.includes('bonus') ||
-        tipo.includes('premiação') ||
-        tipo.includes('premiacao')
-      )
+      return tipo === 'hora_extra' || tipo === 'bonus'
     })
     return acc + overtimeLaunches.reduce((sum, l) => sum + l.valor, 0)
   }, 0)
