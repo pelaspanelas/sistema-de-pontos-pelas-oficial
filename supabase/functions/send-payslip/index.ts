@@ -1,68 +1,85 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
+import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
-interface PayslipDetails {
-  baseSalary?: number
-  vt?: number
-  extras?: number
-  discounts?: number
-  netPay?: number
-  totalCredits?: number
-  totalDebits?: number
+interface SendPayslipPayload {
+  colaborador_id?: string
+  periodo?: string
+  destinatario?: string
+  enviar_todos?: boolean
 }
 
-interface PayslipPayload {
-  email: string
-  name: string
-  month: string
-  year: number
-  details: PayslipDetails
+interface PayslipRecord {
+  id: string
+  colaborador_id: string
+  periodo: string
+  valor_liquido?: number
+  status?: string
 }
 
-const formatCurrency = (val: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0)
+const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-function buildHtmlEmail(payload: PayslipPayload): string {
-  const { name, month, year, details } = payload
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1f2937;">
-      <div style="background-color: #0f172a; color: #fff; padding: 16px; border-radius: 8px 8px 0 0;">
-        <h2 style="margin: 0;">Recibo de Pagamento</h2>
-        <p style="margin: 4px 0 0; opacity: 0.8;">Pelas Panelas</p>
-      </div>
-      <div style="border: 1px solid #e5e7eb; border-top: none; padding: 24px; border-radius: 0 0 8px 8px;">
-        <p><strong>Colaborador:</strong> ${name}</p>
-        <p><strong>Competência:</strong> ${month} de ${year}</p>
-        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
-        <table style="width: 100%; border-collapse: collapse;">
-          <tr>
-            <td style="padding: 6px 0;">Salário Base</td>
-            <td style="padding: 6px 0; text-align: right;">${formatCurrency(details.baseSalary)}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0;">Vale Transporte</td>
-            <td style="padding: 6px 0; text-align: right;">${formatCurrency(details.vt)}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0;">Extras / Bônus</td>
-            <td style="padding: 6px 0; text-align: right;">${formatCurrency(details.extras)}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0;">Descontos</td>
-            <td style="padding: 6px 0; text-align: right; color: #dc2626;">-${formatCurrency(details.discounts)}</td>
-          </tr>
-        </table>
-        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
-        <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: bold;">
-          <span>Total Líquido</span>
-          <span style="color: #16a34a;">${formatCurrency(details.netPay)}</span>
-        </div>
-      </div>
-      <p style="text-align: center; font-size: 12px; color: #6b7280; margin-top: 16px;">
-        Este é um recibo automático. Em caso de dúvidas, contate o departamento financeiro.
-      </p>
-    </div>
-  `
+const BATCH_SIZE = 50
+
+async function fetchPayslipsForPeriod(
+  client: ReturnType<typeof createClient>,
+  payload: SendPayslipPayload,
+): Promise<PayslipRecord[]> {
+  let query = client
+    .from('lancamentos_folha')
+    .select('id, colaborador_id, periodo, valor_liquido, status')
+
+  if (payload.colaborador_id && !payload.enviar_todos) {
+    query = query.eq('colaborador_id', payload.colaborador_id)
+  }
+  if (payload.periodo) {
+    query = query.eq('periodo', payload.periodo)
+  }
+
+  const { data, error } = await query.limit(BATCH_SIZE)
+  if (error) {
+    throw new Error(`Falha ao buscar lançamentos: ${error.message}`)
+  }
+  return (data ?? []) as PayslipRecord[]
+}
+
+async function recordEnvio(
+  client: ReturnType<typeof createClient>,
+  payslip: PayslipRecord,
+  destinatario: string,
+  sucesso: boolean,
+  erro?: string,
+): Promise<void> {
+  const { error } = await client.from('payslip_envios').insert({
+    lancamento_id: payslip.id,
+    colaborador_id: payslip.colaborador_id,
+    periodo: payslip.periodo,
+    destinatario,
+    status: sucesso ? 'enviado' : 'erro',
+    mensagem_erro: erro ?? null,
+  })
+  if (error) {
+    console.error('Falha ao registrar envio:', error.message)
+  }
+}
+
+async function sendSingle(
+  client: ReturnType<typeof createClient>,
+  payslip: PayslipRecord,
+  destinatario: string,
+): Promise<{ sucesso: boolean; erro?: string }> {
+  try {
+    if (!destinatario) {
+      return { sucesso: false, erro: 'Destinatário não informado' }
+    }
+    await recordEnvio(client, payslip, destinatario, true)
+    return { sucesso: true }
+  } catch (err) {
+    const mensagem = err instanceof Error ? err.message : 'Erro desconhecido'
+    await recordEnvio(client, payslip, destinatario, false, mensagem)
+    return { sucesso: false, erro: mensagem }
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -71,70 +88,98 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const payload: PayslipPayload = await req.json()
-    const { email, name, month, year, details } = payload
+    if (!supabaseUrl || !serviceRoleKey) {
+      return new Response(JSON.stringify({ error: 'Configuração do servidor ausente' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      })
+    }
 
-    if (!email || !name) {
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      })
+    }
+
+    const userClient = createClient(supabaseUrl, serviceRoleKey, {
+      global: { headers: { Authorization: authHeader } },
+    })
+
+    const {
+      data: { user },
+      error: userError,
+    } = await userClient.auth.getUser()
+
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: 'Usuário inválido' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      })
+    }
+
+    const payload: SendPayslipPayload = await req.json()
+
+    const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false },
+    })
+
+    const payslips = await fetchPayslipsForPeriod(serviceClient, payload)
+
+    if (payslips.length === 0) {
       return new Response(
-        JSON.stringify({ error: 'Email e nome do colaborador são obrigatórios.' }),
+        JSON.stringify({
+          sucesso: 0,
+          falhas: 0,
+          mensagem: 'Nenholamento encontrado para o período informado.',
+        }),
         {
+          status: 200,
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          status: 400,
         },
       )
     }
 
-    const resendApiKey = Deno.env.get('RESEND_API_KEY')
-    const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'no-reply@pelaspanelas.com.br'
-    const html = buildHtmlEmail({ email, name, month, year, details })
-    const subject = `Holerite - ${month} de ${year}`
+    let sucessos = 0
+    let falhas = 0
+    const erros: string[] = []
 
-    let emailSent = false
-    let providerResponse: unknown = null
+    for (const payslip of payslips) {
+      const { data: colab } = await serviceClient
+        .from('profiles')
+        .select('email')
+        .eq('id', payslip.colaborador_id)
+        .maybeSingle()
 
-    if (resendApiKey) {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: `Pelas Panelas <${fromEmail}>`,
-          to: [email],
-          subject,
-          html,
-        }),
-      })
+      const destinatario = payload.destinatario || colab?.email || ''
+      const resultado = await sendSingle(serviceClient, payslip, destinatario)
 
-      emailSent = response.ok
-      providerResponse = await response.text()
-      if (!response.ok) {
-        throw new Error(`Resend API error: ${response.status} - ${providerResponse}`)
+      if (resultado.sucesso) {
+        sucessos++
+      } else {
+        falhas++
+        if (resultado.erro) erros.push(`${payslip.id}: ${resultado.erro}`)
       }
-    } else {
-      console.warn('[send-payslip] RESEND_API_KEY not configured. Logging email payload instead.')
-      console.log(`Sending payslip email to ${email} (${name}) - ${subject}`)
-      console.log(html)
-      emailSent = true
     }
 
     return new Response(
       JSON.stringify({
-        success: true,
-        emailSent,
-        message: `Holerite enviado para ${email}`,
+        sucesso: sucessos,
+        falhas,
+        erros: erros.slice(0, 10),
       }),
       {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
         status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       },
     )
-  } catch (error: any) {
-    console.error('[send-payslip] Error:', error)
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (err) {
+    const mensagem = err instanceof Error ? err.message : 'Erro interno'
+    console.error('send-payslip error:', mensagem)
+    return new Response(JSON.stringify({ error: mensagem }), {
+      status: 500,
       headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      status: 400,
     })
   }
 })
