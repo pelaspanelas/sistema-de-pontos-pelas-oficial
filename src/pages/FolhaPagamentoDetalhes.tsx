@@ -47,14 +47,23 @@ import {
   Pencil,
   Lock,
   Mail,
+  Send,
+  MessageCircle,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { PaySlipPrint } from '@/components/folha-pagamento/PaySlipPrint'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
 
 interface Profile {
   id: string
   name: string
   email: string
+  phone?: string | null
   role: string
   cpf: string
   admission_date: string
@@ -134,7 +143,7 @@ export default function FolhaPagamentoDetalhes() {
       const { data: profileData, error: profileErr } = await supabase
         .from('profiles')
         .select(
-          'id, name, role, cpf, admission_date, base_salary, banco_horas_ativo, valor_vt, email',
+          'id, name, role, cpf, admission_date, base_salary, banco_horas_ativo, valor_vt, email, phone',
         )
         .eq('id', id)
         .single()
@@ -407,9 +416,51 @@ export default function FolhaPagamentoDetalhes() {
   }
 
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [sendingChannel, setSendingChannel] = useState<'email' | 'whatsapp' | 'ambos' | null>(null)
 
   const formatCurrency = (val: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0)
+
+  function buildWhatsAppMessage(): string {
+    const lines = [
+      '*Holerite - Pelas Panelas*',
+      `Colaborador: ${profile?.name ?? ''}`,
+      `Competência: ${monthName} de ${year}`,
+      '',
+      `Salário Base: ${formatCurrency(profile?.base_salary || 0)}`,
+      `VT: ${formatCurrency(totalVt)}`,
+      `Extras/Bônus: ${formatCurrency(totalExtras)}`,
+      `Descontos: ${formatCurrency(totalDiscountsExclVale)}`,
+      '',
+      `*Total Líquido: ${formatCurrency(netPay)}*`,
+    ]
+    return encodeURIComponent(lines.join('\n'))
+  }
+
+  async function handleSendWhatsApp() {
+    setSendingChannel('whatsapp')
+    try {
+      if (!profile?.phone) {
+        toast({
+          title: 'Erro',
+          description: 'Colaborador não possui telefone cadastrado.',
+          variant: 'destructive',
+        })
+        return
+      }
+      const digits = profile.phone.replace(/\D/g, '')
+      if (!digits) {
+        toast({ title: 'Erro', description: 'Telefone inválido.', variant: 'destructive' })
+        return
+      }
+      const url = `https://wa.me/55${digits}?text=${buildWhatsAppMessage()}`
+      window.open(url, '_blank')
+      await logPayslipSend('whatsapp')
+      toast({ title: 'WhatsApp', description: 'Abrindo conversa no WhatsApp...' })
+    } finally {
+      setSendingChannel(null)
+    }
+  }
 
   async function handleSendEmail() {
     if (!profile?.email) {
@@ -420,22 +471,63 @@ export default function FolhaPagamentoDetalhes() {
       })
       return
     }
-    setSendingEmail(true)
+    setSendingChannel('email')
     try {
       const { error } = await supabase.functions.invoke('send-payslip', {
         body: {
           email: profile.email,
+          name: profile.name,
           month: monthName,
           year: year,
-          details: { netPay, totalCredits, totalDebits },
+          details: {
+            baseSalary: profile.base_salary || 0,
+            vt: totalVt,
+            extras: totalExtras,
+            discounts: totalDiscountsExclVale,
+            netPay,
+            totalCredits,
+            totalDebits,
+          },
         },
       })
       if (error) throw error
+      await logPayslipSend('email')
       toast({ title: 'Sucesso', description: 'Holerite enviado por email!' })
     } catch (err) {
       toast({ title: 'Erro', description: 'Falha ao enviar email.', variant: 'destructive' })
     } finally {
-      setSendingEmail(false)
+      setSendingChannel(null)
+    }
+  }
+
+  async function handleSendBoth() {
+    setSendingChannel('ambos')
+    try {
+      await handleSendEmail()
+      if (profile?.phone) {
+        await handleSendWhatsApp()
+      } else {
+        toast({
+          title: 'Aviso',
+          description: 'Email enviado. Telefone não cadastrado para WhatsApp.',
+        })
+      }
+    } finally {
+      setSendingChannel(null)
+    }
+  }
+
+  async function logPayslipSend(canal: 'email' | 'whatsapp' | 'ambos') {
+    try {
+      await supabase.from('payslip_envios' as any).insert({
+        profile_id: id,
+        mes: month,
+        ano: year,
+        canal,
+        enviado_por: user?.id,
+      })
+    } catch (e) {
+      // silent fail - logging is best effort
     }
   }
 
@@ -455,6 +547,19 @@ export default function FolhaPagamentoDetalhes() {
     .reduce((acc, l) => acc + Number(l.valor), 0)
   const totalDebits = launches
     .filter((l) => l.categoria === 'debito')
+    .reduce((acc, l) => acc + Number(l.valor), 0)
+  const totalVt = launches
+    .filter((l) => l.categoria === 'credito' && l.tipo.toLowerCase() === 'vt')
+    .reduce((acc, l) => acc + Number(l.valor), 0)
+  const totalExtras = launches
+    .filter(
+      (l) =>
+        l.categoria === 'credito' &&
+        (l.tipo.toLowerCase() === 'hora_extra' || l.tipo.toLowerCase() === 'bonus'),
+    )
+    .reduce((acc, l) => acc + Number(l.valor), 0)
+  const totalDiscountsExclVale = launches
+    .filter((l) => l.categoria === 'debito' && l.tipo.toLowerCase() !== 'vale')
     .reduce((acc, l) => acc + Number(l.valor), 0)
   const netPay = (Number(profile.base_salary) || 0) + totalCredits - totalDebits
   const monthName = new Date(year, month - 1).toLocaleString('pt-BR', { month: 'long' })
@@ -484,19 +589,37 @@ export default function FolhaPagamentoDetalhes() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleSendEmail} disabled={sendingEmail}>
-              {sendingEmail ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Mail className="h-4 w-4 mr-2" />
-              )}
-              Enviar por Email
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" disabled={sendingChannel !== null}>
+                  {sendingChannel !== null ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  Enviar Holerite
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleSendWhatsApp}>
+                  <MessageCircle className="h-4 w-4 mr-2" />
+                  Enviar por WhatsApp
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleSendEmail}>
+                  <Mail className="h-4 w-4 mr-2" />
+                  Enviar por E-mail
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleSendBoth}>
+                  <Send className="h-4 w-4 mr-2" />
+                  Enviar por Ambos
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="default" onClick={() => window.print()}>
               <Printer className="h-4 w-4 mr-2" />
               Gerar Holerite
             </Button>
-          </div>
+          </div>{' '}
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">

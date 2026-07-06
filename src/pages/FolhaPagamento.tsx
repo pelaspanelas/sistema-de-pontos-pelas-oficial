@@ -237,7 +237,6 @@ export default function FolhaPagamento() {
     }
   }
 
-  const totalCost = data.reduce((acc, curr) => acc + curr.calculatedPayment, 0)
   const totalHours = data.reduce((acc, curr) => acc + curr.totalHours, 0)
   const totalEmployees = data.length
 
@@ -245,11 +244,7 @@ export default function FolhaPagamento() {
 
   const sumVt = data.reduce((acc, curr) => {
     const vtLaunches = curr.launches.filter(
-      (l) =>
-        l.tipo.toLowerCase().includes('vale transporte') ||
-        l.tipo.toLowerCase() === 'vt' ||
-        l.descricao.toLowerCase().includes('vale transporte') ||
-        l.descricao.toLowerCase() === 'vt',
+      (l) => l.categoria === 'credito' && l.tipo.toLowerCase() === 'vt',
     )
     return acc + vtLaunches.reduce((sum, l) => sum + l.valor, 0)
   }, 0)
@@ -270,6 +265,8 @@ export default function FolhaPagamento() {
     })
     return acc + overtimeLaunches.reduce((sum, l) => sum + l.valor, 0)
   }, 0)
+
+  const totalCost = sumBaseSalaries + sumVt + sumOvertime - sumDiscounts
 
   const provision13 = sumBaseSalaries / 12
   const provisionVacation = provision13 / 3
