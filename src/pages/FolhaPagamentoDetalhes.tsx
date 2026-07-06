@@ -473,7 +473,7 @@ export default function FolhaPagamentoDetalhes() {
     }
     setSendingChannel('email')
     try {
-      const { error } = await supabase.functions.invoke('send-payslip', {
+      const result = await supabase.functions.invoke('send-payslip', {
         body: {
           email: profile.email,
           name: profile.name,
@@ -490,11 +490,15 @@ export default function FolhaPagamentoDetalhes() {
           },
         },
       })
-      if (error) throw error
+      if (result.error) throw result.error
       await logPayslipSend('email')
       toast({ title: 'Sucesso', description: 'Holerite enviado por email!' })
-    } catch (err) {
-      toast({ title: 'Erro', description: 'Falha ao enviar email.', variant: 'destructive' })
+    } catch (err: any) {
+      const msg =
+        err && typeof err.message === 'string' && err.message.includes('is not valid JSON')
+          ? 'Serviço de email indisponível. Tente novamente em instantes.'
+          : 'Falha ao enviar email.'
+      toast({ title: 'Erro', description: msg, variant: 'destructive' })
     } finally {
       setSendingChannel(null)
     }
