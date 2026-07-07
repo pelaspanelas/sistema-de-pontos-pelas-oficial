@@ -77,6 +77,7 @@ export function ColaboradorFormModal({
       historico: false,
     },
     banco_horas_ativo: false,
+    loja_id: null,
   })
 
   useEffect(() => {
@@ -130,6 +131,7 @@ export function ColaboradorFormModal({
               historico: false,
             },
             banco_horas_ativo: p.banco_horas_ativo || false,
+            loja_id: p.loja_id || null,
           })
         }
         setFetching(false)
@@ -162,6 +164,7 @@ export function ColaboradorFormModal({
           historico: false,
         },
         banco_horas_ativo: false,
+        loja_id: null,
       })
     }
   }, [open, colaboradorId])
@@ -176,7 +179,7 @@ export function ColaboradorFormModal({
         const args: any = {
           p_user_id: formData.id,
           p_name: formData.nome,
-          p_phone: formData.telefone,
+          p_phone: formData.telefone || null,
           p_birth_date: birthDate,
           p_cpf: formData.cpf,
           p_zip_code: formData.cep,
@@ -192,6 +195,7 @@ export function ColaboradorFormModal({
           p_valor_vt: parseCurrencyToDBLocal(formData.valor_vt),
           p_schedules: formData.schedules,
           p_permissions: formData.permissions,
+          p_loja_id: formData.loja_id || null,
         }
         const { error } = await supabase.rpc('update_user_account', args)
         if (error) throw error
@@ -211,7 +215,7 @@ export function ColaboradorFormModal({
           p_email: formData.email,
           p_password: formData.senha || '123456',
           p_name: formData.nome,
-          p_phone: formData.telefone,
+          p_phone: formData.telefone || null,
           p_birth_date: birthDate,
           p_cpf: formData.cpf,
           p_zip_code: formData.cep,
@@ -227,6 +231,7 @@ export function ColaboradorFormModal({
           p_valor_vt: parseCurrencyToDBLocal(formData.valor_vt),
           p_schedules: formData.schedules,
           p_permissions: formData.permissions,
+          p_loja_id: formData.loja_id || null,
         }
         const { data: newUserId, error } = await supabase.rpc('create_user_account', args)
         if (error) throw error
