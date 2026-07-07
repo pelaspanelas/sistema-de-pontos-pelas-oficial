@@ -288,20 +288,18 @@ function AjusteModal({
           </div>
           <div className="space-y-2">
             <Label>Tipo de Ponto</Label>
-            <Select
-              value={form.tipo_ponto}
-              onValueChange={(v) => setForm((prev) => ({ ...prev, tipo_ponto: v }))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="entrada">Entrada</SelectItem>
-                <SelectItem value="saida_almoco">Almoço (Almoço)</SelectItem>
-                <SelectItem value="retorno_almoco">Retorno (Retorno)</SelectItem>
-                <SelectItem value="saida">Saída</SelectItem>
-              </SelectContent>
-            </Select>
+            <Input
+              value={
+                {
+                  entrada: 'Entrada',
+                  saida_almoco: 'Saída Almoço',
+                  retorno_almoco: 'Retorno Almoço',
+                  saida: 'Saída',
+                }[form.tipo_ponto] || form.tipo_ponto
+              }
+              disabled
+              readOnly
+            />
           </div>
           <div className="space-y-2">
             <Label>Horário Solicitado (HH:mm)</Label>
@@ -800,23 +798,31 @@ export default function EspelhoPonto() {
     const targetUserId = selectedUser === 'me' ? user?.id : selectedUser
     if (!targetUserId) return
 
-    const { error } = await supabase.from('ajuste_ponto').insert({
-      usuario_id: targetUserId,
-      data_ponto: ajusteData.data_ponto,
-      horario_solicitado: form.horario_solicitado,
-      motivo: form.motivo,
-      tipo_ponto: form.tipo_ponto,
-      status: 'pendente',
-    } as any)
+    try {
+      const { error } = await supabase.from('ajuste_ponto').insert({
+        usuario_id: targetUserId,
+        data_ponto: ajusteData.data_ponto,
+        horario_solicitado: form.horario_solicitado,
+        motivo: form.motivo,
+        tipo_ponto: form.tipo_ponto,
+        status: 'pendente',
+      } as any)
 
-    if (error) throw error
+      if (error) throw error
 
-    toast({
-      title: 'Solicitação enviada para análise',
-      className: 'bg-emerald-50 text-emerald-900 border-emerald-200',
-    })
-    setAjusteModal(false)
-    fetchRecords()
+      toast({
+        title: 'Solicitação enviada para análise',
+        className: 'bg-emerald-50 text-emerald-900 border-emerald-200',
+      })
+      setAjusteModal(false)
+      fetchRecords()
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao enviar solicitação',
+        description: err.message,
+      })
+    }
   }
 
   const renderCell = (row: any, field: string) => {
@@ -870,7 +876,7 @@ export default function EspelhoPonto() {
             </Tooltip>
           )}
         </span>
-        {(!value || isManagerOrAdmin) && !hasPending && (
+        {!hasPending && (
           <button
             type="button"
             title={isManagerOrAdmin ? 'Editar Ponto' : 'Solicitar Ajuste'}
@@ -909,7 +915,7 @@ export default function EspelhoPonto() {
         <span className={`font-medium flex items-center gap-2 ${isManual ? 'text-blue-600' : ''}`}>
           {value || '--:--'}
           {isManual && <Settings2 className="w-3 h-3 text-blue-500" />}
-          {(!value || isManagerOrAdmin) && !hasPending && (
+          {!hasPending && (
             <button
               type="button"
               className="text-muted-foreground hover:text-primary"
