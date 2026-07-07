@@ -41,8 +41,8 @@ const PermissionGuard = ({
   if (loading) return null
   if (!profile) return <Navigate to="/ponto" replace />
 
-  const isAdmin = profile.access_level === 'total'
-  const isGerencia = profile.access_level === 'gerencia'
+  const isAdmin = profile.access_level === 'total' || profile.access_level === 'admin'
+  const isGerencia = profile.access_level === 'gerencia' || profile.access_level === 'manager'
 
   if (isAdmin) return <>{children}</>
 

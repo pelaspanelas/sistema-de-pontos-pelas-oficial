@@ -110,7 +110,11 @@ export default function FolhaPagamento() {
   const { toast } = useToast()
   const navigate = useNavigate()
   const { profile } = useAuth()
-  const isManagerOrAdmin = profile?.access_level === 'total' || profile?.access_level === 'gerencia'
+  const isManagerOrAdmin =
+    profile?.access_level === 'total' ||
+    profile?.access_level === 'gerencia' ||
+    profile?.access_level === 'admin' ||
+    profile?.access_level === 'manager'
 
   useEffect(() => {
     fetchData()

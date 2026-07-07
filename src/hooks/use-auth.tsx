@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase/client'
-import { toast } from '@/hooks/use-toast'
 
 interface Profile {
   id: string
@@ -43,17 +42,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .from('profiles')
         .select('id, name, avatar_url, access_level, permissions')
         .eq('id', userId)
-        .single()
+        .maybeSingle()
 
       if (error) throw error
       setProfile(data)
     } catch (err) {
-      console.error(err)
-      toast({
-        title: 'Erro ao buscar perfil',
-        description: 'Não foi possível carregar os dados do usuário.',
-        variant: 'destructive',
-      })
+      console.error('Failed to load profile:', err)
       setProfile(null)
     }
   }

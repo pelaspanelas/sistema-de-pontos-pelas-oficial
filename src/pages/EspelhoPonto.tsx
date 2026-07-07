@@ -373,7 +373,11 @@ export default function EspelhoPonto() {
     record: null,
   })
 
-  const isManagerOrAdmin = profile?.access_level === 'total' || profile?.access_level === 'gerencia'
+  const isManagerOrAdmin =
+    profile?.access_level === 'total' ||
+    profile?.access_level === 'gerencia' ||
+    profile?.access_level === 'admin' ||
+    profile?.access_level === 'manager'
 
   useEffect(() => {
     if (isManagerOrAdmin) fetchUsers()
@@ -511,18 +515,52 @@ export default function EspelhoPonto() {
   }
 
   const rowsWithBalance = useMemo(() => {
-    const ascRecords = [...records].reverse()
+    const monthInt = parseInt(selectedMonth, 10)
+    const yearInt = parseInt(selectedYear, 10)
+    const today = new Date()
+    const isCurrentMonth = today.getMonth() === monthInt && today.getFullYear() === yearInt
+    const lastDay = isCurrentMonth ? today.getDate() : new Date(yearInt, monthInt + 1, 0).getDate()
+
+    const recordMap = new Map<string, any>(records.map((r) => [r.data, r]))
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = format(yesterday, 'yyyy-MM-dd')
+
+    const allDays: any[] = []
+    for (let day = 1; day <= lastDay; day++) {
+      const dateStr = format(new Date(yearInt, monthInt, day), 'yyyy-MM-dd')
+      const record = recordMap.get(dateStr)
+      const dateObj = new Date(yearInt, monthInt, day)
+      const isSunday = dateObj.getDay() === 0
+      const isPast = dateStr <= yesterdayStr
+      const hasIncomplete =
+        !!record &&
+        (!record.entrada || !record.saida_almoco || !record.retorno_almoco || !record.saida)
+
+      allDays.push({
+        id: record?.id || dateStr,
+        data: dateStr,
+        entrada: record?.entrada || null,
+        saida_almoco: record?.saida_almoco || null,
+        retorno_almoco: record?.retorno_almoco || null,
+        saida: record?.saida || null,
+        horas_calculadas: record?.horas_calculadas || 0,
+        tipo_registro: record?.tipo_registro || null,
+        isSunday,
+        isPast,
+        hasIncomplete,
+        isMissing: !record && isPast && !isSunday,
+      })
+    }
+
+    const ascDays = [...allDays].sort((a, b) => a.data.localeCompare(b.data))
     let cumulative = 0
-    const mapped = ascRecords.map((r) => {
-      const dailyHours = r.horas_calculadas || 0
-      cumulative += dailyHours
-      return {
-        ...r,
-        horas_acumuladas_linha: cumulative,
-      }
+    const mapped = ascDays.map((r) => {
+      cumulative += Number(r.horas_calculadas) || 0
+      return { ...r, horas_acumuladas_linha: cumulative }
     })
     return mapped.reverse()
-  }, [records])
+  }, [records, selectedMonth, selectedYear])
 
   const sortedRows = useMemo(() => {
     return [...rowsWithBalance].sort((a, b) => {
@@ -1235,10 +1273,28 @@ export default function EspelhoPonto() {
                       return (
                         <TableRow
                           key={row.id}
-                          className={cn('hover:bg-muted/30', isFerias && 'bg-blue-50/30')}
+                          className={cn(
+                            'hover:bg-muted/30',
+                            isFerias && 'bg-blue-50/30',
+                            row.isSunday && !isFerias && 'bg-muted/20',
+                            (row.hasIncomplete || row.isMissing) &&
+                              'bg-red-50/60 border-l-4 border-l-red-400',
+                          )}
                         >
                           <TableCell className="font-medium">
-                            {format(parseISO(row.data), 'dd/MM/yyyy')}
+                            <div>
+                              {format(parseISO(row.data), 'dd/MM/yyyy')}
+                              {row.isSunday && !isFerias && (
+                                <span className="block text-xs text-muted-foreground font-normal">
+                                  Domingo, Folga Semanal
+                                </span>
+                              )}
+                              {row.isMissing && (
+                                <span className="block text-xs text-red-600 font-normal">
+                                  Registro faltante
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>{renderCell(row, 'entrada')}</TableCell>
                           <TableCell>{renderCell(row, 'saida_almoco')}</TableCell>
@@ -1265,11 +1321,27 @@ export default function EspelhoPonto() {
                   return (
                     <Card
                       key={row.id}
-                      className={cn('overflow-hidden', isFerias && 'border-blue-200 bg-blue-50/20')}
+                      className={cn(
+                        'overflow-hidden',
+                        isFerias && 'border-blue-200 bg-blue-50/20',
+                        row.isSunday && !isFerias && 'bg-muted/20 border-muted',
+                        (row.hasIncomplete || row.isMissing) &&
+                          'border-l-4 border-l-red-400 bg-red-50/60',
+                      )}
                     >
                       <div className="bg-muted/30 px-4 py-2 border-b flex justify-between items-center">
                         <span className="font-semibold">
                           {format(parseISO(row.data), 'dd/MM/yyyy')}
+                          {row.isSunday && !isFerias && (
+                            <span className="block text-xs text-muted-foreground font-normal">
+                              Domingo, Folga Semanal
+                            </span>
+                          )}
+                          {row.isMissing && (
+                            <span className="block text-xs text-red-600 font-normal">
+                              Registro faltante
+                            </span>
+                          )}
                         </span>
                         <span className="text-sm font-medium text-foreground">
                           Acumulado: {formatDecimalHours(row.horas_acumuladas_linha)}
