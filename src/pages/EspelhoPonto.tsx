@@ -44,6 +44,8 @@ import {
   isWithinInterval,
 } from 'date-fns'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
 import {
@@ -346,6 +348,7 @@ export default function EspelhoPonto() {
   const [loading, setLoading] = useState(true)
   const [records, setRecords] = useState<any[]>([])
   const [ajustesPendentes, setAjustesPendentes] = useState<any[]>([])
+  const [myAjustes, setMyAjustes] = useState<any[]>([])
   const [manualPointsMap, setManualPointsMap] = useState<Record<string, Record<string, boolean>>>(
     {},
   )
@@ -427,7 +430,6 @@ export default function EspelhoPonto() {
           .from('ajuste_ponto')
           .select('*')
           .eq('usuario_id', targetUserId)
-          .eq('status', 'pendente')
           .gte('data_ponto', start)
           .lte('data_ponto', end),
         supabase
@@ -494,7 +496,8 @@ export default function EspelhoPonto() {
 
       setManualPointsMap(map)
       setRecords(fetchedRecords)
-      setAjustesPendentes(resAjustes.data || [])
+      setMyAjustes(resAjustes.data || [])
+      setAjustesPendentes((resAjustes.data || []).filter((a) => a.status === 'pendente'))
       setFeriados(resFeriados.data || [])
       setFeriasPeriodos(resFerias.data || [])
 
@@ -1030,265 +1033,325 @@ export default function EspelhoPonto() {
         </Card>
       </div>
 
-      <Card className="animate-slide-up">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg">
-            Registros de {MONTHS.find((m) => m.value === selectedMonth)?.label}
-          </CardTitle>
-          <CardDescription>Resumo de horas trabalhadas no período selecionado.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="sm:hidden mb-4 flex gap-2">
-            <ToggleGroup
-              type="single"
-              value={viewMode}
-              onValueChange={(v) => v && setViewMode(v as 'list' | 'calendar')}
-              className="bg-background border rounded-md p-1 flex-1 flex"
-            >
-              <ToggleGroupItem value="list" aria-label="Lista" className="flex-1 text-sm">
-                <LayoutList className="h-4 w-4 mr-2" /> Lista
-              </ToggleGroupItem>
-              <ToggleGroupItem value="calendar" aria-label="Calendário" className="flex-1 text-sm">
-                <CalendarDaysIcon className="h-4 w-4 mr-2" /> Calendário
-              </ToggleGroupItem>
-            </ToggleGroup>
-            <Button variant="outline" onClick={exportToCSV} className="h-10 px-3">
-              <FileDown className="w-4 h-4" />
-            </Button>
-          </div>
+      <Tabs defaultValue="espelho" className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger value="espelho">Espelho de Ponto</TabsTrigger>
+          <TabsTrigger value="ajustes">Meus Ajustes</TabsTrigger>
+        </TabsList>
+        <TabsContent value="espelho">
+          <Card className="animate-slide-up">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg">
+                Registros de {MONTHS.find((m) => m.value === selectedMonth)?.label}
+              </CardTitle>
+              <CardDescription>Resumo de horas trabalhadas no período selecionado.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="sm:hidden mb-4 flex gap-2">
+                <ToggleGroup
+                  type="single"
+                  value={viewMode}
+                  onValueChange={(v) => v && setViewMode(v as 'list' | 'calendar')}
+                  className="bg-background border rounded-md p-1 flex-1 flex"
+                >
+                  <ToggleGroupItem value="list" aria-label="Lista" className="flex-1 text-sm">
+                    <LayoutList className="h-4 w-4 mr-2" /> Lista
+                  </ToggleGroupItem>
+                  <ToggleGroupItem
+                    value="calendar"
+                    aria-label="Calendário"
+                    className="flex-1 text-sm"
+                  >
+                    <CalendarDaysIcon className="h-4 w-4 mr-2" /> Calendário
+                  </ToggleGroupItem>
+                </ToggleGroup>
+                <Button variant="outline" onClick={exportToCSV} className="h-10 px-3">
+                  <FileDown className="w-4 h-4" />
+                </Button>
+              </div>
 
-          {loading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-          ) : viewMode === 'calendar' ? (
-            <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
-              <div className="min-w-[700px] border rounded-md overflow-hidden bg-background">
-                <div className="grid grid-cols-7 border-b bg-muted/50 [&>div:nth-child(7n)]:border-r-0">
-                  {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d) => (
-                    <div key={d} className="p-2 text-center text-sm font-semibold border-r">
-                      {d}
-                    </div>
-                  ))}
+              {loading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
                 </div>
-                <div className="grid grid-cols-7 [&>div:nth-child(7n)]:border-r-0">
-                  {(() => {
-                    const monthInt = parseInt(selectedMonth, 10)
-                    const yearInt = parseInt(selectedYear, 10)
-                    const baseDate = new Date(yearInt, monthInt, 1)
+              ) : viewMode === 'calendar' ? (
+                <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
+                  <div className="min-w-[700px] border rounded-md overflow-hidden bg-background">
+                    <div className="grid grid-cols-7 border-b bg-muted/50 [&>div:nth-child(7n)]:border-r-0">
+                      {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d) => (
+                        <div key={d} className="p-2 text-center text-sm font-semibold border-r">
+                          {d}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-7 [&>div:nth-child(7n)]:border-r-0">
+                      {(() => {
+                        const monthInt = parseInt(selectedMonth, 10)
+                        const yearInt = parseInt(selectedYear, 10)
+                        const baseDate = new Date(yearInt, monthInt, 1)
 
-                    const start = startOfWeek(startOfMonth(baseDate))
-                    const end = endOfWeek(endOfMonth(baseDate))
-                    const days = eachDayOfInterval({ start, end })
+                        const start = startOfWeek(startOfMonth(baseDate))
+                        const end = endOfWeek(endOfMonth(baseDate))
+                        const days = eachDayOfInterval({ start, end })
 
-                    return days.map((day, i) => {
-                      const dateStr = format(day, 'yyyy-MM-dd')
-                      const record = rowsWithBalance.find((r) => r.data === dateStr)
-                      const feriado = feriados.find((f) => f.data === dateStr)
-                      const isFerias = feriasPeriodos.some((f) =>
-                        isWithinInterval(day, {
-                          start: parseISO(f.data_inicio),
-                          end: parseISO(f.data_fim),
-                        }),
-                      )
-                      const isCurrentMonth = isSameMonth(day, baseDate)
-                      const isWknd = isWeekend(day)
-                      const isDayToday = isToday(day)
+                        return days.map((day, i) => {
+                          const dateStr = format(day, 'yyyy-MM-dd')
+                          const record = rowsWithBalance.find((r) => r.data === dateStr)
+                          const feriado = feriados.find((f) => f.data === dateStr)
+                          const isFerias = feriasPeriodos.some((f) =>
+                            isWithinInterval(day, {
+                              start: parseISO(f.data_inicio),
+                              end: parseISO(f.data_fim),
+                            }),
+                          )
+                          const isCurrentMonth = isSameMonth(day, baseDate)
+                          const isWknd = isWeekend(day)
+                          const isDayToday = isToday(day)
 
-                      return (
-                        <div
-                          key={dateStr}
-                          className={cn(
-                            'border-b border-r p-2 min-h-[120px] flex flex-col gap-1 transition-colors cursor-pointer group',
-                            !isCurrentMonth && 'bg-muted/20 opacity-60',
-                            isCurrentMonth && isWknd && !isFerias && 'bg-muted/10',
-                            isCurrentMonth && feriado && !isFerias && 'bg-orange-50/30',
-                            isCurrentMonth && isFerias && 'bg-blue-50/40',
-                            'hover:bg-muted/30',
-                          )}
-                          onClick={() => !isFerias && openActionModal(dateStr, 'entrada', record)}
-                        >
-                          <div className="flex justify-between items-start">
-                            <span
+                          return (
+                            <div
+                              key={dateStr}
                               className={cn(
-                                'text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full',
-                                isDayToday
-                                  ? 'bg-primary text-primary-foreground'
-                                  : 'text-foreground',
+                                'border-b border-r p-2 min-h-[120px] flex flex-col gap-1 transition-colors cursor-pointer group',
+                                !isCurrentMonth && 'bg-muted/20 opacity-60',
+                                isCurrentMonth && isWknd && !isFerias && 'bg-muted/10',
+                                isCurrentMonth && feriado && !isFerias && 'bg-orange-50/30',
+                                isCurrentMonth && isFerias && 'bg-blue-50/40',
+                                'hover:bg-muted/30',
+                              )}
+                              onClick={() =>
+                                !isFerias && openActionModal(dateStr, 'entrada', record)
+                              }
+                            >
+                              <div className="flex justify-between items-start">
+                                <span
+                                  className={cn(
+                                    'text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full',
+                                    isDayToday
+                                      ? 'bg-primary text-primary-foreground'
+                                      : 'text-foreground',
+                                  )}
+                                >
+                                  {format(day, 'd')}
+                                </span>
+                                {isFerias && isCurrentMonth ? (
+                                  <span
+                                    className="text-[10px] text-blue-700 font-semibold truncate max-w-[60px] bg-blue-100/80 px-1 py-0.5 rounded"
+                                    title="Férias"
+                                  >
+                                    Férias
+                                  </span>
+                                ) : feriado && isCurrentMonth ? (
+                                  <span
+                                    className="text-[10px] text-orange-700 font-semibold truncate max-w-[60px] bg-orange-100/80 px-1 py-0.5 rounded"
+                                    title={feriado.nome}
+                                  >
+                                    {feriado.nome}
+                                  </span>
+                                ) : null}
+                              </div>
+
+                              <div className="mt-1 flex-1 flex flex-col justify-end">
+                                {record ? (
+                                  <div className="text-[11px] space-y-0.5">
+                                    {['entrada', 'saida_almoco', 'retorno_almoco', 'saida'].map(
+                                      (field) => {
+                                        const labels: Record<string, string> = {
+                                          entrada: 'Ent',
+                                          saida_almoco: 'S.Alm',
+                                          retorno_almoco: 'R.Alm',
+                                          saida: 'Saí',
+                                        }
+                                        const val = record[field]
+                                        const isManual = manualPointsMap[dateStr]?.[field]
+                                        const hasPending = ajustesPendentes.some(
+                                          (a) => a.data_ponto === dateStr && a.tipo_ponto === field,
+                                        )
+
+                                        return (
+                                          <div
+                                            key={field}
+                                            className="flex justify-between items-center group/item"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              openActionModal(dateStr, field, record)
+                                            }}
+                                          >
+                                            <span className="text-muted-foreground">
+                                              {labels[field]}:
+                                            </span>
+                                            <span
+                                              className={cn(
+                                                'font-medium transition-colors cursor-pointer group-hover/item:text-primary',
+                                                isManual
+                                                  ? 'text-blue-600'
+                                                  : val
+                                                    ? 'text-foreground'
+                                                    : '',
+                                                !val && hasPending && 'text-orange-500',
+                                                !val && !hasPending && 'text-muted-foreground/30',
+                                              )}
+                                            >
+                                              {val ? val : hasPending ? 'Pendente' : '--:--'}
+                                            </span>
+                                          </div>
+                                        )
+                                      },
+                                    )}
+                                    <div className="pt-1 mt-1 border-t flex justify-between items-center font-semibold">
+                                      <span className="text-muted-foreground">Tot:</span>
+                                      <span className={getHoursColor(record.horas_calculadas)}>
+                                        {formatDecimalHours(record.horas_calculadas)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-muted-foreground/40 text-center flex-1 flex items-center justify-center group-hover:text-primary/50 transition-colors">
+                                    Sem registro
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              ) : rowsWithBalance.length === 0 ? (
+                <div className="text-center py-10">
+                  <p className="text-muted-foreground">Nenhum registro de ponto neste mês.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="hidden md:block rounded-md border overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-muted/50">
+                        <TableRow>
+                          <TableHead
+                            className="w-[120px] cursor-pointer hover:bg-muted/80 transition-colors"
+                            onClick={() => handleSort('data')}
+                          >
+                            <div className="flex items-center gap-1">
+                              Data <ArrowUpDown className="w-3 h-3" />
+                            </div>
+                          </TableHead>
+                          <TableHead
+                            className="cursor-pointer hover:bg-muted/80 transition-colors"
+                            onClick={() => handleSort('entrada')}
+                          >
+                            <div className="flex items-center gap-1">
+                              Entrada <ArrowUpDown className="w-3 h-3" />
+                            </div>
+                          </TableHead>
+                          <TableHead
+                            className="cursor-pointer hover:bg-muted/80 transition-colors"
+                            onClick={() => handleSort('saida_almoco')}
+                          >
+                            <div className="flex items-center gap-1">
+                              Almoço <ArrowUpDown className="w-3 h-3" />
+                            </div>
+                          </TableHead>
+                          <TableHead
+                            className="cursor-pointer hover:bg-muted/80 transition-colors"
+                            onClick={() => handleSort('retorno_almoco')}
+                          >
+                            <div className="flex items-center gap-1">
+                              Retorno <ArrowUpDown className="w-3 h-3" />
+                            </div>
+                          </TableHead>
+                          <TableHead
+                            className="cursor-pointer hover:bg-muted/80 transition-colors"
+                            onClick={() => handleSort('saida')}
+                          >
+                            <div className="flex items-center gap-1">
+                              Saída <ArrowUpDown className="w-3 h-3" />
+                            </div>
+                          </TableHead>
+                          <TableHead
+                            className="cursor-pointer hover:bg-muted/80 transition-colors"
+                            onClick={() => handleSort('horas_calculadas')}
+                          >
+                            <div className="flex items-center gap-1">
+                              Total Hrs <ArrowUpDown className="w-3 h-3" />
+                            </div>
+                          </TableHead>
+                          <TableHead
+                            className="text-right cursor-pointer hover:bg-muted/80 transition-colors"
+                            onClick={() => handleSort('horas_acumuladas_linha')}
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              Horas Acumuladas <ArrowUpDown className="w-3 h-3" />
+                            </div>
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sortedRows.map((row) => {
+                          const isFerias = isDiaDeFerias(row.data)
+                          return (
+                            <TableRow
+                              key={row.id}
+                              className={cn(
+                                'hover:bg-muted/30',
+                                isFerias && 'bg-blue-50/30',
+                                row.isSunday && !isFerias && 'bg-muted/20',
+                                (row.hasIncomplete || row.isMissing) &&
+                                  'bg-red-50/60 border-l-4 border-l-red-400',
                               )}
                             >
-                              {format(day, 'd')}
-                            </span>
-                            {isFerias && isCurrentMonth ? (
-                              <span
-                                className="text-[10px] text-blue-700 font-semibold truncate max-w-[60px] bg-blue-100/80 px-1 py-0.5 rounded"
-                                title="Férias"
-                              >
-                                Férias
-                              </span>
-                            ) : feriado && isCurrentMonth ? (
-                              <span
-                                className="text-[10px] text-orange-700 font-semibold truncate max-w-[60px] bg-orange-100/80 px-1 py-0.5 rounded"
-                                title={feriado.nome}
-                              >
-                                {feriado.nome}
-                              </span>
-                            ) : null}
-                          </div>
-
-                          <div className="mt-1 flex-1 flex flex-col justify-end">
-                            {record ? (
-                              <div className="text-[11px] space-y-0.5">
-                                {['entrada', 'saida_almoco', 'retorno_almoco', 'saida'].map(
-                                  (field) => {
-                                    const labels: Record<string, string> = {
-                                      entrada: 'Ent',
-                                      saida_almoco: 'S.Alm',
-                                      retorno_almoco: 'R.Alm',
-                                      saida: 'Saí',
-                                    }
-                                    const val = record[field]
-                                    const isManual = manualPointsMap[dateStr]?.[field]
-                                    const hasPending = ajustesPendentes.some(
-                                      (a) => a.data_ponto === dateStr && a.tipo_ponto === field,
-                                    )
-
-                                    return (
-                                      <div
-                                        key={field}
-                                        className="flex justify-between items-center group/item"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          openActionModal(dateStr, field, record)
-                                        }}
-                                      >
-                                        <span className="text-muted-foreground">
-                                          {labels[field]}:
-                                        </span>
-                                        <span
-                                          className={cn(
-                                            'font-medium transition-colors cursor-pointer group-hover/item:text-primary',
-                                            isManual
-                                              ? 'text-blue-600'
-                                              : val
-                                                ? 'text-foreground'
-                                                : '',
-                                            !val && hasPending && 'text-orange-500',
-                                            !val && !hasPending && 'text-muted-foreground/30',
-                                          )}
-                                        >
-                                          {val ? val : hasPending ? 'Pendente' : '--:--'}
-                                        </span>
-                                      </div>
-                                    )
-                                  },
-                                )}
-                                <div className="pt-1 mt-1 border-t flex justify-between items-center font-semibold">
-                                  <span className="text-muted-foreground">Tot:</span>
-                                  <span className={getHoursColor(record.horas_calculadas)}>
-                                    {formatDecimalHours(record.horas_calculadas)}
-                                  </span>
+                              <TableCell className="font-medium">
+                                <div>
+                                  {format(parseISO(row.data), 'dd/MM/yyyy')}
+                                  {row.isSunday && !isFerias && (
+                                    <span className="block text-xs text-muted-foreground font-normal">
+                                      Domingo, Folga Semanal
+                                    </span>
+                                  )}
+                                  {row.isMissing && (
+                                    <span className="block text-xs text-red-600 font-normal">
+                                      Registro faltante
+                                    </span>
+                                  )}
                                 </div>
-                              </div>
-                            ) : (
-                              <div className="text-xs text-muted-foreground/40 text-center flex-1 flex items-center justify-center group-hover:text-primary/50 transition-colors">
-                                Sem registro
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })
-                  })()}
-                </div>
-              </div>
-            </div>
-          ) : rowsWithBalance.length === 0 ? (
-            <div className="text-center py-10">
-              <p className="text-muted-foreground">Nenhum registro de ponto neste mês.</p>
-            </div>
-          ) : (
-            <>
-              <div className="hidden md:block rounded-md border overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-muted/50">
-                    <TableRow>
-                      <TableHead
-                        className="w-[120px] cursor-pointer hover:bg-muted/80 transition-colors"
-                        onClick={() => handleSort('data')}
-                      >
-                        <div className="flex items-center gap-1">
-                          Data <ArrowUpDown className="w-3 h-3" />
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-muted/80 transition-colors"
-                        onClick={() => handleSort('entrada')}
-                      >
-                        <div className="flex items-center gap-1">
-                          Entrada <ArrowUpDown className="w-3 h-3" />
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-muted/80 transition-colors"
-                        onClick={() => handleSort('saida_almoco')}
-                      >
-                        <div className="flex items-center gap-1">
-                          Almoço <ArrowUpDown className="w-3 h-3" />
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-muted/80 transition-colors"
-                        onClick={() => handleSort('retorno_almoco')}
-                      >
-                        <div className="flex items-center gap-1">
-                          Retorno <ArrowUpDown className="w-3 h-3" />
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-muted/80 transition-colors"
-                        onClick={() => handleSort('saida')}
-                      >
-                        <div className="flex items-center gap-1">
-                          Saída <ArrowUpDown className="w-3 h-3" />
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="cursor-pointer hover:bg-muted/80 transition-colors"
-                        onClick={() => handleSort('horas_calculadas')}
-                      >
-                        <div className="flex items-center gap-1">
-                          Total Hrs <ArrowUpDown className="w-3 h-3" />
-                        </div>
-                      </TableHead>
-                      <TableHead
-                        className="text-right cursor-pointer hover:bg-muted/80 transition-colors"
-                        onClick={() => handleSort('horas_acumuladas_linha')}
-                      >
-                        <div className="flex items-center justify-end gap-1">
-                          Horas Acumuladas <ArrowUpDown className="w-3 h-3" />
-                        </div>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                              </TableCell>
+                              <TableCell>{renderCell(row, 'entrada')}</TableCell>
+                              <TableCell>{renderCell(row, 'saida_almoco')}</TableCell>
+                              <TableCell>{renderCell(row, 'retorno_almoco')}</TableCell>
+                              <TableCell>{renderCell(row, 'saida')}</TableCell>
+                              <TableCell
+                                className={`font-medium ${getHoursColor(row.horas_calculadas)}`}
+                              >
+                                {formatDecimalHours(row.horas_calculadas)}
+                              </TableCell>
+                              <TableCell className="text-right font-medium text-foreground">
+                                {formatDecimalHours(row.horas_acumuladas_linha)}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div className="md:hidden space-y-4">
                     {sortedRows.map((row) => {
                       const isFerias = isDiaDeFerias(row.data)
                       return (
-                        <TableRow
+                        <Card
                           key={row.id}
                           className={cn(
-                            'hover:bg-muted/30',
-                            isFerias && 'bg-blue-50/30',
-                            row.isSunday && !isFerias && 'bg-muted/20',
+                            'overflow-hidden',
+                            isFerias && 'border-blue-200 bg-blue-50/20',
+                            row.isSunday && !isFerias && 'bg-muted/20 border-muted',
                             (row.hasIncomplete || row.isMissing) &&
-                              'bg-red-50/60 border-l-4 border-l-red-400',
+                              'border-l-4 border-l-red-400 bg-red-50/60',
                           )}
                         >
-                          <TableCell className="font-medium">
-                            <div>
+                          <div className="bg-muted/30 px-4 py-2 border-b flex justify-between items-center">
+                            <span className="font-semibold">
                               {format(parseISO(row.data), 'dd/MM/yyyy')}
                               {row.isSunday && !isFerias && (
                                 <span className="block text-xs text-muted-foreground font-normal">
@@ -1300,84 +1363,117 @@ export default function EspelhoPonto() {
                                   Registro faltante
                                 </span>
                               )}
-                            </div>
-                          </TableCell>
-                          <TableCell>{renderCell(row, 'entrada')}</TableCell>
-                          <TableCell>{renderCell(row, 'saida_almoco')}</TableCell>
-                          <TableCell>{renderCell(row, 'retorno_almoco')}</TableCell>
-                          <TableCell>{renderCell(row, 'saida')}</TableCell>
-                          <TableCell
-                            className={`font-medium ${getHoursColor(row.horas_calculadas)}`}
-                          >
-                            {formatDecimalHours(row.horas_calculadas)}
-                          </TableCell>
-                          <TableCell className="text-right font-medium text-foreground">
-                            {formatDecimalHours(row.horas_acumuladas_linha)}
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="md:hidden space-y-4">
-                {sortedRows.map((row) => {
-                  const isFerias = isDiaDeFerias(row.data)
-                  return (
-                    <Card
-                      key={row.id}
-                      className={cn(
-                        'overflow-hidden',
-                        isFerias && 'border-blue-200 bg-blue-50/20',
-                        row.isSunday && !isFerias && 'bg-muted/20 border-muted',
-                        (row.hasIncomplete || row.isMissing) &&
-                          'border-l-4 border-l-red-400 bg-red-50/60',
-                      )}
-                    >
-                      <div className="bg-muted/30 px-4 py-2 border-b flex justify-between items-center">
-                        <span className="font-semibold">
-                          {format(parseISO(row.data), 'dd/MM/yyyy')}
-                          {row.isSunday && !isFerias && (
-                            <span className="block text-xs text-muted-foreground font-normal">
-                              Domingo, Folga Semanal
                             </span>
-                          )}
-                          {row.isMissing && (
-                            <span className="block text-xs text-red-600 font-normal">
-                              Registro faltante
-                            </span>
-                          )}
-                        </span>
-                        <span className="text-sm font-medium text-foreground">
-                          Acumulado: {formatDecimalHours(row.horas_acumuladas_linha)}
-                        </span>
-                      </div>
-                      <CardContent className="p-4 grid grid-cols-2 gap-y-3 text-sm">
-                        {renderMobileCell(row, 'entrada', 'Entrada')}
-                        {renderMobileCell(row, 'saida_almoco', 'Almoço')}
-                        {renderMobileCell(row, 'retorno_almoco', 'Retorno')}
-                        {renderMobileCell(row, 'saida', 'Saída')}
-
-                        <div className="col-span-2 pt-2 border-t mt-1 flex justify-between">
-                          <div>
-                            <span className="text-muted-foreground text-xs mr-2">Total Horas:</span>
-                            <span
-                              className={`font-semibold ${getHoursColor(row.horas_calculadas)}`}
-                            >
-                              {formatDecimalHours(row.horas_calculadas)}
+                            <span className="text-sm font-medium text-foreground">
+                              Acumulado: {formatDecimalHours(row.horas_acumuladas_linha)}
                             </span>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+                          <CardContent className="p-4 grid grid-cols-2 gap-y-3 text-sm">
+                            {renderMobileCell(row, 'entrada', 'Entrada')}
+                            {renderMobileCell(row, 'saida_almoco', 'Almoço')}
+                            {renderMobileCell(row, 'retorno_almoco', 'Retorno')}
+                            {renderMobileCell(row, 'saida', 'Saída')}
+
+                            <div className="col-span-2 pt-2 border-t mt-1 flex justify-between">
+                              <div>
+                                <span className="text-muted-foreground text-xs mr-2">
+                                  Total Horas:
+                                </span>
+                                <span
+                                  className={`font-semibold ${getHoursColor(row.horas_calculadas)}`}
+                                >
+                                  {formatDecimalHours(row.horas_calculadas)}
+                                </span>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="ajustes">
+          <Card className="animate-slide-up">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg">Meus Ajustes</CardTitle>
+              <CardDescription>
+                Histórico de solicitações de ajuste de ponto no período.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {myAjustes.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  <p>Nenhuma solicitação de ajuste neste período.</p>
+                </div>
+              ) : (
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Horário Solicitado</TableHead>
+                        <TableHead>Motivo</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {myAjustes.map((ajuste) => {
+                        const statusConfig: Record<string, { label: string; className: string }> = {
+                          pendente: {
+                            label: 'Pendente',
+                            className: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100',
+                          },
+                          aprovado: {
+                            label: 'Aprovado',
+                            className: 'bg-green-100 text-green-800 hover:bg-green-100',
+                          },
+                          reprovado: {
+                            label: 'Reprovado',
+                            className: 'bg-red-100 text-red-800 hover:bg-red-100',
+                          },
+                        }
+                        const tipoLabels: Record<string, string> = {
+                          entrada: 'Entrada',
+                          saida_almoco: 'Saída Almoço',
+                          retorno_almoco: 'Retorno Almoço',
+                          saida: 'Saída',
+                        }
+                        return (
+                          <TableRow key={ajuste.id}>
+                            <TableCell className="font-medium">
+                              {format(parseISO(ajuste.data_ponto), 'dd/MM/yyyy')}
+                            </TableCell>
+                            <TableCell>
+                              {tipoLabels[ajuste.tipo_ponto] || ajuste.tipo_ponto}
+                            </TableCell>
+                            <TableCell className="font-mono">{ajuste.horario_solicitado}</TableCell>
+                            <TableCell className="max-w-xs truncate" title={ajuste.motivo}>
+                              {ajuste.motivo}
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                className={statusConfig[ajuste.status]?.className || ''}
+                                variant="outline"
+                              >
+                                {statusConfig[ajuste.status]?.label || ajuste.status}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <AjusteModal
         open={ajusteModal}

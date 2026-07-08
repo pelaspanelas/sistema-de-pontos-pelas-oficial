@@ -16,6 +16,7 @@ import {
   LogOut,
   Fingerprint,
   ChefHat,
+  ClipboardCheck,
 } from 'lucide-react'
 
 import {
@@ -139,6 +140,11 @@ export function AppSidebar() {
       { name: 'Registro de Férias', path: '/ferias', icon: Calendar },
     ]
     if (isAdmin || isGerencia) {
+      operacionalItems.push({
+        name: 'Ajustes de Ponto',
+        path: '/ajustes-ponto',
+        icon: ClipboardCheck,
+      })
       operacionalItems.push({
         name: 'Folha de Pagamento',
         path: '/folha-pagamento',

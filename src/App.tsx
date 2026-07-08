@@ -18,6 +18,7 @@ import FolhaPagamento from './pages/FolhaPagamento'
 import Ferias from './pages/Ferias'
 import FolhaPagamentoDetalhes from './pages/FolhaPagamentoDetalhes'
 import Feriados from './pages/Feriados'
+import AjustesPonto from './pages/AjustesPonto'
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth()
@@ -90,6 +91,14 @@ const App = () => (
               element={
                 <PermissionGuard permission="operacional">
                   <EspelhoPonto />
+                </PermissionGuard>
+              }
+            />
+            <Route
+              path="/ajustes-ponto"
+              element={
+                <PermissionGuard requiresGerenciaOrAdmin>
+                  <AjustesPonto />
                 </PermissionGuard>
               }
             />
