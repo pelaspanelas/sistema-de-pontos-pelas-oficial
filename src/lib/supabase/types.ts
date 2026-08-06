@@ -791,56 +791,31 @@ export type Database = {
       current_user_loja_id: { Args: never; Returns: string }
       delete_user_account: { Args: { p_user_id: string }; Returns: undefined }
       is_manager_or_admin: { Args: never; Returns: boolean }
-      update_user_account:
-        | {
-            Args: {
-              p_access_level: string
-              p_address: string
-              p_address_number: string
-              p_admission_date: string
-              p_base_salary: number
-              p_birth_date: string
-              p_city: string
-              p_complement: string
-              p_cpf: string
-              p_loja_id?: string
-              p_name: string
-              p_neighborhood: string
-              p_permissions: Json
-              p_phone: string
-              p_role: string
-              p_schedules: Json
-              p_user_id: string
-              p_valor_vt?: number
-              p_zip_code: string
-            }
-            Returns: undefined
-          }
-        | {
-            Args: {
-              p_access_level: string
-              p_address: string
-              p_address_number: string
-              p_admission_date: string
-              p_almoco_automatico?: boolean
-              p_base_salary: number
-              p_birth_date: string
-              p_city: string
-              p_complement: string
-              p_cpf: string
-              p_loja_id?: string
-              p_name: string
-              p_neighborhood: string
-              p_permissions: Json
-              p_phone: string
-              p_role: string
-              p_schedules: Json
-              p_user_id: string
-              p_valor_vt?: number
-              p_zip_code: string
-            }
-            Returns: undefined
-          }
+      update_user_account: {
+        Args: {
+          p_access_level: string
+          p_address: string
+          p_address_number: string
+          p_admission_date: string
+          p_almoco_automatico?: boolean
+          p_base_salary: number
+          p_birth_date: string
+          p_city: string
+          p_complement: string
+          p_cpf: string
+          p_loja_id?: string
+          p_name: string
+          p_neighborhood: string
+          p_permissions: Json
+          p_phone: string
+          p_role: string
+          p_schedules: Json
+          p_user_id: string
+          p_valor_vt?: number
+          p_zip_code: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

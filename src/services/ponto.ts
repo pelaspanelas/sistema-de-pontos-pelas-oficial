@@ -251,8 +251,11 @@ export async function registrarPonto({
       const lunchEndStr = lunchEnd.substring(0, 5)
 
       const [yy, mm, dd] = data.split('-')
-      const lunchStartISO = new Date(`${yy}-${mm}-${dd}T${lunchStart}:00`).toISOString()
-      const lunchEndISO = new Date(`${yy}-${mm}-${dd}T${lunchEnd}:00`).toISOString()
+      if (!yy || !mm || !dd) {
+        throw new Error(`Data inválida para registro do almoço automático: "${data}"`)
+      }
+      const lunchStartISO = new Date(`${yy}-${mm}-${dd}T${lunchStartStr}:00`).toISOString()
+      const lunchEndISO = new Date(`${yy}-${mm}-${dd}T${lunchEndStr}:00`).toISOString()
 
       try {
         await registrarPontoIndividual(
