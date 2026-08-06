@@ -92,6 +92,20 @@ export function TabProfissional({
           />
         </div>
       </div>
+      <div className="col-span-2">
+        <div className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
+          <div className="space-y-0.5">
+            <Label className="text-base">Almoço Automático</Label>
+            <p className="text-sm text-muted-foreground">
+              Registra automaticamente saída e retorno do almoço com base nos horários cadastrados
+            </p>
+          </div>
+          <Switch
+            checked={data.almoco_automatico}
+            onCheckedChange={(v) => onChange({ ...data, almoco_automatico: v })}
+          />
+        </div>
+      </div>
     </div>
   )
 }

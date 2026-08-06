@@ -10,6 +10,32 @@ export async function fetchPontoDiario(profileId: string, data: string) {
   return { record, error }
 }
 
+function parseTimeToMinutes(t: string) {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}
+
+async function registrarPontoIndividual(
+  profileId: string,
+  data: string,
+  dataHoraISO: string,
+  tipoPonto: string,
+  horario: string,
+  tipoRegistro: string = 'automático',
+) {
+  const { error } = await supabase.from('pontos').insert({
+    profile_id: profileId,
+    criado_por: profileId,
+    data,
+    data_hora: dataHoraISO,
+    tipo_ponto: tipoPonto,
+    horario,
+    tipo_registro: tipoRegistro,
+    status_validacao: tipoRegistro === 'automático' ? 'validado' : null,
+  })
+  if (error) throw error
+}
+
 export async function registrarPonto({
   profileId,
   data,
@@ -33,14 +59,19 @@ export async function registrarPonto({
   let toastMsg = null
   let toastVariant = 'default'
 
+  let hasBancoHoras = false
+  let almocoAutomatico = false
+  let daySchedule: any = null
+
   try {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('banco_horas_ativo, role')
+      .select('banco_horas_ativo, role, almoco_automatico')
       .eq('id', profileId)
       .single()
 
-    const hasBancoHoras = profile?.banco_horas_ativo === true
+    hasBancoHoras = profile?.banco_horas_ativo === true
+    almocoAutomatico = profile?.almoco_automatico === true
     const role = profile?.role
 
     const { data: checkFerias } = await supabase
@@ -69,14 +100,14 @@ export async function registrarPonto({
       .eq('day_of_week', dayOfWeek)
       .maybeSingle()
 
+    daySchedule = schedule
+
     if (schedule) {
-      const [ah, am] = horario.split(':').map(Number)
-      const actualTime = ah * 60 + am
+      const actualTime = parseTimeToMinutes(horario)
 
       if (!hasBancoHoras) {
         if (tipoPonto === 'entrada' && schedule.entry_time) {
-          const [eh, em] = schedule.entry_time.split(':').map(Number)
-          const expectedTime = eh * 60 + em
+          const expectedTime = parseTimeToMinutes(schedule.entry_time)
           const diff = actualTime - expectedTime
 
           if (diff < -20) {
@@ -87,11 +118,9 @@ export async function registrarPonto({
             toastVariant = 'warning'
           }
         } else if (tipoPonto === 'saída' && schedule.exit_time) {
-          const [eh, em] = schedule.exit_time.split(':').map(Number)
-          const expectedTime = eh * 60 + em
+          const expectedTime = parseTimeToMinutes(schedule.exit_time)
           const diff = actualTime - expectedTime
 
-          // Role-based validation config point
           const isTolerantRole = role === 'Diretor' || role === 'Sócio'
 
           if (!isTolerantRole && diff > 15) {
@@ -108,7 +137,6 @@ export async function registrarPonto({
     if (err.message === 'FORA_DO_HORARIO_PERMITIDO') {
       throw err
     }
-    // erro ao buscar horario, ignora e segue normal
   }
 
   let foto_url = null
@@ -152,6 +180,23 @@ export async function registrarPonto({
   }
   const colName = colMap[tipoPonto]
 
+  const updateHorasCalculadas = (
+    tEntrada: string | null,
+    tSaidaAlmoco: string | null,
+    tRetornoAlmoco: string | null,
+    tSaida: string | null,
+  ) => {
+    if (tEntrada && tSaidaAlmoco && tRetornoAlmoco && tSaida) {
+      const m1 = parseTimeToMinutes(tEntrada)
+      const m2 = parseTimeToMinutes(tSaidaAlmoco)
+      const m3 = parseTimeToMinutes(tRetornoAlmoco)
+      const m4 = parseTimeToMinutes(tSaida)
+      const totalMinutes = m2 - m1 + (m4 - m3)
+      return totalMinutes / 60
+    }
+    return null
+  }
+
   if (record) {
     const updates: any = { [colName]: horario }
 
@@ -160,18 +205,9 @@ export async function registrarPonto({
     const tRetornoAlmoco = colName === 'retorno_almoco' ? horario : record.retorno_almoco
     const tSaida = colName === 'saida' ? horario : record.saida
 
-    if (tEntrada && tSaidaAlmoco && tRetornoAlmoco && tSaida) {
-      const parseTime = (t: string) => {
-        const [h, m] = t.split(':').map(Number)
-        return h * 60 + m
-      }
-      const m1 = parseTime(tEntrada)
-      const m2 = parseTime(tSaidaAlmoco)
-      const m3 = parseTime(tRetornoAlmoco)
-      const m4 = parseTime(tSaida)
-
-      const totalMinutes = m2 - m1 + (m4 - m3)
-      updates.horas_calculadas = totalMinutes / 60
+    const horas = updateHorasCalculadas(tEntrada, tSaidaAlmoco, tRetornoAlmoco, tSaida)
+    if (horas !== null) {
+      updates.horas_calculadas = horas
     }
 
     const { error: err2 } = await supabase
@@ -188,6 +224,61 @@ export async function registrarPonto({
       tipo_registro: 'automático',
     })
     if (err3) throw err3
+  }
+
+  if (tipoPonto === 'entrada' && almocoAutomatico && daySchedule) {
+    const lunchStart = daySchedule.lunch_start
+    const lunchEnd = daySchedule.lunch_end
+
+    if (lunchStart && lunchEnd) {
+      const lunchStartStr = lunchStart.substring(0, 5)
+      const lunchEndStr = lunchEnd.substring(0, 5)
+
+      const [yy, mm, dd] = data.split('-')
+      const lunchStartISO = new Date(`${yy}-${mm}-${dd}T${lunchStart}:00`).toISOString()
+      const lunchEndISO = new Date(`${yy}-${mm}-${dd}T${lunchEnd}:00`).toISOString()
+
+      await registrarPontoIndividual(
+        profileId,
+        data,
+        lunchStartISO,
+        'almoço_saída',
+        lunchStartStr,
+        'automático',
+      )
+      await registrarPontoIndividual(
+        profileId,
+        data,
+        lunchEndISO,
+        'almoço_retorno',
+        lunchEndStr,
+        'automático',
+      )
+
+      const { record: updatedRecord } = await fetchPontoDiario(profileId, data)
+      if (updatedRecord) {
+        const tEntrada = updatedRecord.entrada
+        const horas = updateHorasCalculadas(
+          tEntrada,
+          lunchStartStr,
+          lunchEndStr,
+          updatedRecord.saida,
+        )
+        const { error: errLunch } = await supabase
+          .from('pontos_diarios')
+          .update({
+            saida_almoco: lunchStartStr,
+            retorno_almoco: lunchEndStr,
+            ...(horas !== null ? { horas_calculadas: horas } : {}),
+          })
+          .eq('id', updatedRecord.id)
+        if (errLunch) throw errLunch
+      }
+
+      toastMsg = toastMsg
+        ? `${toastMsg}. Almoço registrado automaticamente (${lunchStartStr} - ${lunchEndStr})`
+        : `Almoço registrado automaticamente (${lunchStartStr} - ${lunchEndStr})`
+    }
   }
 
   return { toastMsg, toastVariant }

@@ -36,5 +36,6 @@ export interface ColaboradorFormState {
   schedules: ScheduleFormState[]
   permissions: PermissionsState
   banco_horas_ativo: boolean
+  almoco_automatico: boolean
   loja_id?: string | null
 }

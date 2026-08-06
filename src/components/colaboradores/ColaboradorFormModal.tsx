@@ -77,6 +77,7 @@ export function ColaboradorFormModal({
       historico: false,
     },
     banco_horas_ativo: false,
+    almoco_automatico: false,
     loja_id: null,
   })
 
@@ -131,6 +132,7 @@ export function ColaboradorFormModal({
               historico: false,
             },
             banco_horas_ativo: p.banco_horas_ativo || false,
+            almoco_automatico: p.almoco_automatico || false,
             loja_id: p.loja_id || null,
           })
         }
@@ -164,6 +166,7 @@ export function ColaboradorFormModal({
           historico: false,
         },
         banco_horas_ativo: false,
+        almoco_automatico: false,
         loja_id: null,
       })
     }
@@ -196,6 +199,7 @@ export function ColaboradorFormModal({
           p_schedules: formData.schedules,
           p_permissions: formData.permissions,
           p_loja_id: formData.loja_id || null,
+          p_almoco_automatico: formData.almoco_automatico,
         }
         const { error } = await supabase.rpc('update_user_account', args)
         if (error) throw error
@@ -239,11 +243,13 @@ export function ColaboradorFormModal({
         if (newUserId) {
           const { error: errorBanco } = await supabase
             .from('profiles')
-            .update({ banco_horas_ativo: formData.banco_horas_ativo })
+            .update({
+              banco_horas_ativo: formData.banco_horas_ativo,
+              almoco_automatico: formData.almoco_automatico,
+            })
             .eq('id', newUserId)
           if (errorBanco) throw errorBanco
         }
-
         toast({ title: 'Banco de horas atualizado', description: 'Colaborador salvo com sucesso.' })
       }
 
