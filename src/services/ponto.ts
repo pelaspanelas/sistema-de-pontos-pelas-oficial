@@ -15,6 +15,23 @@ function parseTimeToMinutes(t: string) {
   return h * 60 + m
 }
 
+function calcHorasCalculadas(
+  tEntrada: string | null,
+  tSaidaAlmoco: string | null,
+  tRetornoAlmoco: string | null,
+  tSaida: string | null,
+) {
+  if (tEntrada && tSaidaAlmoco && tRetornoAlmoco && tSaida) {
+    const m1 = parseTimeToMinutes(tEntrada)
+    const m2 = parseTimeToMinutes(tSaidaAlmoco)
+    const m3 = parseTimeToMinutes(tRetornoAlmoco)
+    const m4 = parseTimeToMinutes(tSaida)
+    const totalMinutes = m2 - m1 + (m4 - m3)
+    return totalMinutes / 60
+  }
+  return null
+}
+
 async function registrarPontoIndividual(
   profileId: string,
   data: string,
@@ -58,84 +75,87 @@ export async function registrarPonto({
   let statusValidacao = null
   let toastMsg = null
   let toastVariant = 'default'
+  let almocoAutomaticoRegistrado = false
+  let scheduleLunchMissing = false
 
-  let hasBancoHoras = false
-  let almocoAutomatico = false
-  let daySchedule: any = null
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('banco_horas_ativo, role, almoco_automatico')
+    .eq('id', profileId)
+    .single()
 
-  try {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('banco_horas_ativo, role, almoco_automatico')
-      .eq('id', profileId)
-      .single()
+  if (profileError) {
+    console.error('[registrarPonto] Failed to fetch profile:', profileError)
+    throw new Error('Falha ao buscar dados do colaborador: ' + profileError.message)
+  }
 
-    hasBancoHoras = profile?.banco_horas_ativo === true
-    almocoAutomatico = profile?.almoco_automatico === true
-    const role = profile?.role
+  const hasBancoHoras = profile?.banco_horas_ativo === true
+  const almocoAutomatico = profile?.almoco_automatico === true
+  const role = profile?.role
 
-    const { data: checkFerias } = await supabase
-      .from('ferias')
-      .select('id')
-      .eq('profile_id', profileId)
-      .lte('data_inicio', data)
-      .gte('data_fim', data)
-      .neq('status', 'cancelada')
-      .maybeSingle()
+  const { data: checkFerias, error: feriasError } = await supabase
+    .from('ferias')
+    .select('id')
+    .eq('profile_id', profileId)
+    .lte('data_inicio', data)
+    .gte('data_fim', data)
+    .neq('status', 'cancelada')
+    .maybeSingle()
 
-    if (checkFerias) {
-      throw new Error('EM_FERIAS')
-    }
+  if (feriasError) {
+    console.error('[registrarPonto] Failed to check férias:', feriasError)
+    throw new Error('Falha ao verificar período de férias: ' + feriasError.message)
+  }
 
-    if (hasBancoHoras) {
-      toastMsg = 'Ponto registrado com banco de horas ativo'
-    }
+  if (checkFerias) {
+    throw new Error('EM_FERIAS')
+  }
 
-    const now = new Date(dataHora)
-    const dayOfWeek = now.getDay()
-    const { data: schedule } = await supabase
-      .from('schedules')
-      .select('*')
-      .eq('profile_id', profileId)
-      .eq('day_of_week', dayOfWeek)
-      .maybeSingle()
+  if (hasBancoHoras) {
+    toastMsg = 'Ponto registrado com banco de horas ativo'
+  }
 
-    daySchedule = schedule
+  const now = new Date(dataHora)
+  const dayOfWeek = now.getDay()
+  const { data: daySchedule, error: scheduleError } = await supabase
+    .from('schedules')
+    .select('*')
+    .eq('profile_id', profileId)
+    .eq('day_of_week', dayOfWeek)
+    .maybeSingle()
 
-    if (schedule) {
-      const actualTime = parseTimeToMinutes(horario)
+  if (scheduleError) {
+    console.error('[registrarPonto] Failed to fetch schedule:', scheduleError)
+    throw new Error('Falha ao buscar horário cadastrado: ' + scheduleError.message)
+  }
 
-      if (!hasBancoHoras) {
-        if (tipoPonto === 'entrada' && schedule.entry_time) {
-          const expectedTime = parseTimeToMinutes(schedule.entry_time)
-          const diff = actualTime - expectedTime
+  if (daySchedule && !hasBancoHoras) {
+    const actualTime = parseTimeToMinutes(horario)
 
-          if (diff < -20) {
-            throw new Error('FORA_DO_HORARIO_PERMITIDO')
-          } else if (diff >= -20 && diff < -5) {
-            statusValidacao = `aviso_antecipado:${diff}`
-            toastMsg = 'Ponto registrado antes do horário'
-            toastVariant = 'warning'
-          }
-        } else if (tipoPonto === 'saída' && schedule.exit_time) {
-          const expectedTime = parseTimeToMinutes(schedule.exit_time)
-          const diff = actualTime - expectedTime
+    if (tipoPonto === 'entrada' && daySchedule.entry_time) {
+      const expectedTime = parseTimeToMinutes(daySchedule.entry_time)
+      const diff = actualTime - expectedTime
 
-          const isTolerantRole = role === 'Diretor' || role === 'Sócio'
-
-          if (!isTolerantRole && diff > 15) {
-            throw new Error('LIMITE_SAIDA_EXCEDIDO')
-          } else if (diff > 5 && diff <= 15) {
-            statusValidacao = `aviso_atrasado:${diff}`
-            toastMsg = 'Ponto registrado após o horário'
-            toastVariant = 'warning'
-          }
-        }
+      if (diff < -20) {
+        throw new Error('FORA_DO_HORARIO_PERMITIDO')
+      } else if (diff >= -20 && diff < -5) {
+        statusValidacao = `aviso_antecipado:${diff}`
+        toastMsg = 'Ponto registrado antes do horário'
+        toastVariant = 'warning'
       }
-    }
-  } catch (err: any) {
-    if (err.message === 'FORA_DO_HORARIO_PERMITIDO') {
-      throw err
+    } else if (tipoPonto === 'saída' && daySchedule.exit_time) {
+      const expectedTime = parseTimeToMinutes(daySchedule.exit_time)
+      const diff = actualTime - expectedTime
+
+      const isTolerantRole = role === 'Diretor' || role === 'Sócio'
+
+      if (!isTolerantRole && diff > 15) {
+        throw new Error('LIMITE_SAIDA_EXCEDIDO')
+      } else if (diff > 5 && diff <= 15) {
+        statusValidacao = `aviso_atrasado:${diff}`
+        toastMsg = 'Ponto registrado após o horário'
+        toastVariant = 'warning'
+      }
     }
   }
 
@@ -151,7 +171,7 @@ export async function registrarPonto({
       } = supabase.storage.from('pontos_fotos').getPublicUrl(fileName)
       foto_url = publicUrl
     } else if (uploadError) {
-      console.error('Failed to upload photo:', uploadError)
+      console.error('[registrarPonto] Failed to upload photo:', uploadError)
     }
   }
 
@@ -168,9 +188,16 @@ export async function registrarPonto({
     status_validacao: statusValidacao,
   })
 
-  if (err1) throw err1
+  if (err1) {
+    console.error('[registrarPonto] Failed to insert ponto:', err1)
+    throw err1
+  }
 
-  const { record } = await fetchPontoDiario(profileId, data)
+  const { record, error: fetchDiarioError } = await fetchPontoDiario(profileId, data)
+  if (fetchDiarioError) {
+    console.error('[registrarPonto] Failed to fetch pontos_diarios:', fetchDiarioError)
+    throw new Error('Falha ao buscar registro diário de ponto: ' + fetchDiarioError.message)
+  }
 
   const colMap: Record<string, string> = {
     entrada: 'entrada',
@@ -180,23 +207,6 @@ export async function registrarPonto({
   }
   const colName = colMap[tipoPonto]
 
-  const updateHorasCalculadas = (
-    tEntrada: string | null,
-    tSaidaAlmoco: string | null,
-    tRetornoAlmoco: string | null,
-    tSaida: string | null,
-  ) => {
-    if (tEntrada && tSaidaAlmoco && tRetornoAlmoco && tSaida) {
-      const m1 = parseTimeToMinutes(tEntrada)
-      const m2 = parseTimeToMinutes(tSaidaAlmoco)
-      const m3 = parseTimeToMinutes(tRetornoAlmoco)
-      const m4 = parseTimeToMinutes(tSaida)
-      const totalMinutes = m2 - m1 + (m4 - m3)
-      return totalMinutes / 60
-    }
-    return null
-  }
-
   if (record) {
     const updates: any = { [colName]: horario }
 
@@ -205,7 +215,7 @@ export async function registrarPonto({
     const tRetornoAlmoco = colName === 'retorno_almoco' ? horario : record.retorno_almoco
     const tSaida = colName === 'saida' ? horario : record.saida
 
-    const horas = updateHorasCalculadas(tEntrada, tSaidaAlmoco, tRetornoAlmoco, tSaida)
+    const horas = calcHorasCalculadas(tEntrada, tSaidaAlmoco, tRetornoAlmoco, tSaida)
     if (horas !== null) {
       updates.horas_calculadas = horas
     }
@@ -214,7 +224,10 @@ export async function registrarPonto({
       .from('pontos_diarios')
       .update(updates)
       .eq('id', record.id)
-    if (err2) throw err2
+    if (err2) {
+      console.error('[registrarPonto] Failed to update pontos_diarios:', err2)
+      throw err2
+    }
   } else {
     const { error: err3 } = await supabase.from('pontos_diarios').insert({
       profile_id: profileId,
@@ -223,12 +236,15 @@ export async function registrarPonto({
       [colName]: horario,
       tipo_registro: 'automático',
     })
-    if (err3) throw err3
+    if (err3) {
+      console.error('[registrarPonto] Failed to insert pontos_diarios:', err3)
+      throw err3
+    }
   }
 
-  if (tipoPonto === 'entrada' && almocoAutomatico && daySchedule) {
-    const lunchStart = daySchedule.lunch_start
-    const lunchEnd = daySchedule.lunch_end
+  if (tipoPonto === 'entrada' && almocoAutomatico) {
+    const lunchStart = daySchedule?.lunch_start
+    const lunchEnd = daySchedule?.lunch_end
 
     if (lunchStart && lunchEnd) {
       const lunchStartStr = lunchStart.substring(0, 5)
@@ -238,48 +254,80 @@ export async function registrarPonto({
       const lunchStartISO = new Date(`${yy}-${mm}-${dd}T${lunchStart}:00`).toISOString()
       const lunchEndISO = new Date(`${yy}-${mm}-${dd}T${lunchEnd}:00`).toISOString()
 
-      await registrarPontoIndividual(
-        profileId,
-        data,
-        lunchStartISO,
-        'almoço_saída',
-        lunchStartStr,
-        'automático',
-      )
-      await registrarPontoIndividual(
-        profileId,
-        data,
-        lunchEndISO,
-        'almoço_retorno',
-        lunchEndStr,
-        'automático',
-      )
-
-      const { record: updatedRecord } = await fetchPontoDiario(profileId, data)
-      if (updatedRecord) {
-        const tEntrada = updatedRecord.entrada
-        const horas = updateHorasCalculadas(
-          tEntrada,
+      try {
+        await registrarPontoIndividual(
+          profileId,
+          data,
+          lunchStartISO,
+          'almoço_saída',
           lunchStartStr,
-          lunchEndStr,
-          updatedRecord.saida,
+          'automático',
         )
-        const { error: errLunch } = await supabase
-          .from('pontos_diarios')
-          .update({
-            saida_almoco: lunchStartStr,
-            retorno_almoco: lunchEndStr,
-            ...(horas !== null ? { horas_calculadas: horas } : {}),
-          })
-          .eq('id', updatedRecord.id)
-        if (errLunch) throw errLunch
-      }
+        await registrarPontoIndividual(
+          profileId,
+          data,
+          lunchEndISO,
+          'almoço_retorno',
+          lunchEndStr,
+          'automático',
+        )
 
+        const { record: updatedRecord, error: refetchError } = await fetchPontoDiario(
+          profileId,
+          data,
+        )
+        if (refetchError) {
+          console.error(
+            '[registrarPonto] Failed to refetch pontos_diarios after lunch:',
+            refetchError,
+          )
+          throw refetchError
+        }
+
+        if (updatedRecord) {
+          const tEntrada = updatedRecord.entrada
+          const horas = calcHorasCalculadas(
+            tEntrada,
+            lunchStartStr,
+            lunchEndStr,
+            updatedRecord.saida,
+          )
+          const { error: errLunch } = await supabase
+            .from('pontos_diarios')
+            .update({
+              saida_almoco: lunchStartStr,
+              retorno_almoco: lunchEndStr,
+              ...(horas !== null ? { horas_calculadas: horas } : {}),
+            })
+            .eq('id', updatedRecord.id)
+          if (errLunch) {
+            console.error(
+              '[registrarPonto] Failed to update pontos_diarios with lunch times:',
+              errLunch,
+            )
+            throw errLunch
+          }
+        }
+
+        almocoAutomaticoRegistrado = true
+        toastMsg = toastMsg
+          ? `${toastMsg}. Almoço registrado automaticamente (${lunchStartStr} - ${lunchEndStr})`
+          : `Almoço registrado automaticamente (${lunchStartStr} - ${lunchEndStr})`
+      } catch (lunchErr: any) {
+        console.error('[registrarPonto] Failed to register automatic lunch:', lunchErr)
+        throw new Error('Falha ao registrar almoço automático: ' + lunchErr.message)
+      }
+    } else {
+      scheduleLunchMissing = true
+      console.warn(
+        `[registrarPonto] almoco_automatico enabled but no lunch_start/lunch_end found for profile ${profileId} on day_of_week ${dayOfWeek}`,
+      )
       toastMsg = toastMsg
-        ? `${toastMsg}. Almoço registrado automaticamente (${lunchStartStr} - ${lunchEndStr})`
-        : `Almoço registrado automaticamente (${lunchStartStr} - ${lunchEndStr})`
+        ? `${toastMsg}. Almoço automático não registrado: horário de almoço não cadastrado para este dia.`
+        : 'Almoço automático não registrado: horário de almoço não cadastrado para este dia. Registre manualmente.'
+      toastVariant = 'warning'
     }
   }
 
-  return { toastMsg, toastVariant }
+  return { toastMsg, toastVariant, almocoAutomaticoRegistrado, scheduleLunchMissing }
 }
