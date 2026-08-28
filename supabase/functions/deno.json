@@ -1,5 +1,6 @@
 {
   "_versions": {
-    "send-payslip": 8
+    "send-payslip": 8,
+    "registrar-ponto-tablet": 1
   }
 }
