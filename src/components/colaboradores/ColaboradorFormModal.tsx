@@ -79,6 +79,7 @@ export function ColaboradorFormModal({
     banco_horas_ativo: false,
     almoco_automatico: false,
     loja_id: null,
+    pin_ponto: '',
   })
 
   useEffect(() => {
@@ -124,7 +125,7 @@ export function ColaboradorFormModal({
             salarioBase: p.base_salary ? (p.base_salary * 100).toString() : '',
             valor_vt: p.valor_vt ? (p.valor_vt * 100).toString() : '',
             schedules: loadedSchedules,
-            permissions: p.permissions || {
+            permissions: (p.permissions as any) || {
               dashboard_principal: false,
               dashboard_desempenho: false,
               cadastros: false,
@@ -134,6 +135,7 @@ export function ColaboradorFormModal({
             banco_horas_ativo: p.banco_horas_ativo || false,
             almoco_automatico: p.almoco_automatico || false,
             loja_id: p.loja_id || null,
+            pin_ponto: p.pin_ponto || '',
           })
         }
         setFetching(false)
@@ -168,11 +170,23 @@ export function ColaboradorFormModal({
         banco_horas_ativo: false,
         almoco_automatico: false,
         loja_id: null,
+        pin_ponto: '',
       })
     }
   }, [open, colaboradorId])
 
   const handleSave = async () => {
+    // PIN Validation: optional, but if provided, must be exactly 4 numeric digits
+    const cleanedPin = formData.pin_ponto?.trim() || ''
+    if (cleanedPin && !/^\d{4}$/.test(cleanedPin)) {
+      toast({
+        title: 'PIN inválido',
+        description: 'O PIN do Ponto deve conter exatamente 4 dígitos numéricos.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     setLoading(true)
     try {
       const birthDate = safeDateToDB(formData.dataNascimento)
@@ -200,6 +214,7 @@ export function ColaboradorFormModal({
           p_permissions: formData.permissions,
           p_loja_id: formData.loja_id || null,
           p_almoco_automatico: formData.almoco_automatico,
+          p_pin_ponto: cleanedPin || null,
         }
         const { error } = await supabase.rpc('update_user_account', args)
         if (error) throw error
@@ -211,7 +226,7 @@ export function ColaboradorFormModal({
         if (errorBanco) throw errorBanco
 
         toast({
-          title: 'Banco de horas atualizado',
+          title: 'Sucesso',
           description: 'Colaborador atualizado com sucesso.',
         })
       } else {
@@ -236,6 +251,7 @@ export function ColaboradorFormModal({
           p_schedules: formData.schedules,
           p_permissions: formData.permissions,
           p_loja_id: formData.loja_id || null,
+          p_pin_ponto: cleanedPin || null,
         }
         const { data: newUserId, error } = await supabase.rpc('create_user_account', args)
         if (error) throw error
@@ -250,13 +266,21 @@ export function ColaboradorFormModal({
             .eq('id', newUserId)
           if (errorBanco) throw errorBanco
         }
-        toast({ title: 'Banco de horas atualizado', description: 'Colaborador salvo com sucesso.' })
+        toast({ title: 'Sucesso', description: 'Colaborador cadastrado com sucesso.' })
       }
 
       onOpenChange(false)
       onSaved()
     } catch (err: any) {
-      toast({ title: 'Erro ao salvar', description: err.message, variant: 'destructive' })
+      let description = err.message || 'Ocorreu um erro ao salvar.'
+      if (
+        err.message?.includes('idx_profiles_pin_ponto_unique') ||
+        err.details?.includes('idx_profiles_pin_ponto_unique') ||
+        err.code === '23505'
+      ) {
+        description = 'Esse PIN já está em uso por outro colaborador'
+      }
+      toast({ title: 'Erro ao salvar', description, variant: 'destructive' })
     } finally {
       setLoading(false)
     }

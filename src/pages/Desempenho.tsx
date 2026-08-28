@@ -190,7 +190,6 @@ export default function Desempenho() {
         if (cData1) concluidasData.push(...(cData1 as Conclusao[]))
       }
 
-      // @ts-expect-error
       let queryLivre = supabase
         .from('tarefas_concluidas')
         .select('*, responsavel:profiles!tarefas_concluidas_funcionario_id_fkey(id, name)')
@@ -334,8 +333,9 @@ export default function Desempenho() {
         status: livreStatus,
         criado_por: profile?.id,
       }
-      // @ts-expect-error
-      const { error: concError } = await supabase.from('tarefas_concluidas').insert(newConclusao)
+      const { error: concError } = await supabase
+        .from('tarefas_concluidas')
+        .insert(newConclusao as any)
       if (concError) throw concError
 
       toast({ title: 'Sucesso', description: 'Tarefa adicionada com sucesso' })
@@ -377,10 +377,9 @@ export default function Desempenho() {
     if (!selectedInf) return
     setReadingInf(true)
     try {
-      // @ts-expect-error
       const { error } = await supabase
         .from('informativos')
-        .update({ lido: true })
+        .update({ lido: true } as any)
         .eq('id', selectedInf.id)
       if (error) throw error
       toast({ title: 'Sucesso', description: 'Informativo marcado como lido' })

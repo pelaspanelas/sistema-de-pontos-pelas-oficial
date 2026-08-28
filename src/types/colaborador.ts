@@ -38,4 +38,5 @@ export interface ColaboradorFormState {
   banco_horas_ativo: boolean
   almoco_automatico: boolean
   loja_id?: string | null
+  pin_ponto?: string
 }

@@ -8,6 +8,7 @@ interface Profile {
   avatar_url: string | null
   access_level: string | null
   permissions: any
+  pin_ponto?: string | null
 }
 
 interface AuthContextType {
@@ -40,7 +41,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, name, avatar_url, access_level, permissions')
+        .select('id, name, avatar_url, access_level, permissions, pin_ponto')
         .eq('id', userId)
         .maybeSingle()
 

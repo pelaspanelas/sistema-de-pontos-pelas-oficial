@@ -7,6 +7,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { ColaboradorFormState } from '@/types/colaborador'
 import { maskDate, maskCurrency } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
@@ -18,8 +21,16 @@ export function TabProfissional({
   data: ColaboradorFormState
   onChange: (d: ColaboradorFormState) => void
 }) {
+  const [showPin, setShowPin] = useState(false)
+
   const update = (field: keyof ColaboradorFormState, value: string) =>
     onChange({ ...data, [field]: value })
+
+  const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Only allow numbers and max 4 digits
+    const val = e.target.value.replace(/\D/g, '').slice(0, 4)
+    update('pin_ponto', val)
+  }
 
   return (
     <div className="grid grid-cols-2 gap-4">
@@ -77,6 +88,34 @@ export function TabProfissional({
           value={data.valor_vt}
           onChange={(e) => update('valor_vt', maskCurrency(e.target.value))}
         />
+      </div>
+      <div className="space-y-2">
+        <Label>PIN do Ponto (Tablet)</Label>
+        <div className="relative">
+          <Input
+            type={showPin ? 'text' : 'password'}
+            placeholder="4 dígitos"
+            value={data.pin_ponto || ''}
+            onChange={handlePinChange}
+            maxLength={4}
+            inputMode="numeric"
+            pattern="[0-9]*"
+            className="pr-10 font-mono tracking-widest"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            tabIndex={-1}
+            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent text-muted-foreground hover:text-foreground"
+            onClick={() => setShowPin(!showPin)}
+          >
+            {showPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          PIN de 4 dígitos para registro de ponto no tablet.
+        </p>
       </div>
       <div className="col-span-2 mt-2">
         <div className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">

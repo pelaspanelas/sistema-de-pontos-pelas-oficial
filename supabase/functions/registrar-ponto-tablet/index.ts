@@ -131,20 +131,17 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (!supabaseUrl || !serviceRoleKey) {
-      return new Response(
-        JSON.stringify({ error: 'Configuração do servidor Supabase ausente' }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
-        },
-      )
+      return new Response(JSON.stringify({ error: 'Configuração do servidor Supabase ausente' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      })
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },
     })
 
-    const body: RequestBody = await req.json().catch(() => ({} as RequestBody))
+    const body: RequestBody = await req.json().catch(() => ({}) as RequestBody)
 
     if (!body || !body.action) {
       return new Response(
@@ -163,23 +160,17 @@ Deno.serve(async (req: Request) => {
       const { device_token, pin } = body
 
       if (!device_token) {
-        return new Response(
-          JSON.stringify({ error: 'device_token é obrigatório' }),
-          {
-            status: 400,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          },
-        )
+        return new Response(JSON.stringify({ error: 'device_token é obrigatório' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        })
       }
 
       if (!pin) {
-        return new Response(
-          JSON.stringify({ error: 'pin é obrigatório' }),
-          {
-            status: 400,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          },
-        )
+        return new Response(JSON.stringify({ error: 'pin é obrigatório' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        })
       }
 
       // 1. Busca tablet autorizado e ativo
@@ -309,33 +300,24 @@ Deno.serve(async (req: Request) => {
       const { device_token, profile_id, foto_base64 } = body
 
       if (!device_token) {
-        return new Response(
-          JSON.stringify({ error: 'device_token é obrigatório' }),
-          {
-            status: 400,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          },
-        )
+        return new Response(JSON.stringify({ error: 'device_token é obrigatório' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        })
       }
 
       if (!profile_id) {
-        return new Response(
-          JSON.stringify({ error: 'profile_id é obrigatório' }),
-          {
-            status: 400,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          },
-        )
+        return new Response(JSON.stringify({ error: 'profile_id é obrigatório' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        })
       }
 
       if (!foto_base64) {
-        return new Response(
-          JSON.stringify({ error: 'foto_base64 é obrigatória' }),
-          {
-            status: 400,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          },
-        )
+        return new Response(JSON.stringify({ error: 'foto_base64 é obrigatória' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        })
       }
 
       // 1. Revalida device_token ativo
@@ -367,23 +349,17 @@ Deno.serve(async (req: Request) => {
         .maybeSingle()
 
       if (profileError || !profile) {
-        return new Response(
-          JSON.stringify({ error: 'Colaborador não encontrado' }),
-          {
-            status: 404,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          },
-        )
+        return new Response(JSON.stringify({ error: 'Colaborador não encontrado' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        })
       }
 
       if (profile.status !== 'Ativo') {
-        return new Response(
-          JSON.stringify({ error: 'Colaborador inativo no sistema' }),
-          {
-            status: 403,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          },
-        )
+        return new Response(JSON.stringify({ error: 'Colaborador inativo no sistema' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        })
       }
 
       // Horário e data de referência no fuso de São Paulo
@@ -436,9 +412,7 @@ Deno.serve(async (req: Request) => {
         )
       }
 
-      const { data: urlData } = supabase.storage
-        .from('pontos_fotos')
-        .getPublicUrl(filePath)
+      const { data: urlData } = supabase.storage.from('pontos_fotos').getPublicUrl(filePath)
       const fotoUrl = urlData?.publicUrl || null
 
       // 4. Busca registro diário existente de hoje
@@ -581,12 +555,7 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        const horas = calcularHorasTrabalhadas(
-          horarioAtual,
-          saidaAlmocoVal,
-          retornoAlmocoVal,
-          null,
-        )
+        const horas = calcularHorasTrabalhadas(horarioAtual, saidaAlmocoVal, retornoAlmocoVal, null)
 
         const { error: insertDiarioError } = await supabase.from('pontos_diarios').insert({
           profile_id: profile.id,
@@ -665,7 +634,9 @@ Deno.serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ error: `Ação "${(body as Record<string, unknown>).action}" não reconhecida` }),
+      JSON.stringify({
+        error: `Ação "${(body as Record<string, unknown>).action}" não reconhecida`,
+      }),
       {
         status: 400,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },

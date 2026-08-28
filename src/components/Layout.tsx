@@ -2,12 +2,14 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from './AppSidebar'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { LogOut, Upload, Trash2, Camera } from 'lucide-react'
+import { LogOut, Upload, Trash2, Camera, KeyRound, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { useState, useRef, useEffect } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
 import { Bell } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
@@ -62,13 +64,95 @@ export default function Layout() {
 
   const [notifications, setNotifications] = useState<any[]>([])
 
+  // PIN Registration Modal state
+  const [pinModalOpen, setPinModalOpen] = useState(false)
+  const [pinValue, setPinValue] = useState('')
+  const [pinConfirmValue, setPinConfirmValue] = useState('')
+  const [showPinInput, setShowPinInput] = useState(false)
+  const [showConfirmPinInput, setShowConfirmPinInput] = useState(false)
+  const [savingPin, setSavingPin] = useState(false)
+  const [pinPromptDismissed, setPinPromptDismissed] = useState(false)
+
   useEffect(() => {
     if (profile) {
       fetchNotifications()
       const interval = setInterval(fetchNotifications, 60000)
+
+      // Check if logged-in user needs to set a PIN
+      if (profile.pin_ponto === null && !pinPromptDismissed) {
+        setPinModalOpen(true)
+      } else if (profile.pin_ponto !== null) {
+        setPinModalOpen(false)
+      }
+
       return () => clearInterval(interval)
     }
-  }, [profile])
+  }, [profile, pinPromptDismissed])
+
+  const handleSavePin = async () => {
+    const cleanedPin = pinValue.replace(/\D/g, '')
+    const cleanedConfirm = pinConfirmValue.replace(/\D/g, '')
+
+    if (cleanedPin.length !== 4) {
+      toast({
+        title: 'PIN inválido',
+        description: 'O PIN deve conter exatamente 4 dígitos numéricos.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (cleanedPin !== cleanedConfirm) {
+      toast({
+        title: 'PINs não conferem',
+        description: 'A confirmação do PIN não coincide com o PIN digitado.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!profile?.id) return
+
+    setSavingPin(true)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ pin_ponto: cleanedPin })
+        .eq('id', profile.id)
+
+      if (error) throw error
+
+      toast({
+        title: 'PIN cadastrado com sucesso!',
+        description: 'Agora você pode bater seu ponto no tablet usando seu PIN de 4 dígitos.',
+      })
+      setPinModalOpen(false)
+      setPinValue('')
+      setPinConfirmValue('')
+      await refreshProfile()
+    } catch (err: any) {
+      let description = err.message || 'Erro ao cadastrar PIN'
+      if (
+        err.message?.includes('idx_profiles_pin_ponto_unique') ||
+        err.details?.includes('idx_profiles_pin_ponto_unique') ||
+        err.code === '23505'
+      ) {
+        description = 'Esse PIN já está em uso por outro colaborador'
+      }
+      toast({
+        title: 'Erro ao salvar PIN',
+        description,
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingPin(false)
+    }
+  }
+
+  const handleDismissPinModal = () => {
+    setPinModalOpen(false)
+    setPinPromptDismissed(true)
+  }
 
   const fetchNotifications = async () => {
     if (!profile) return
@@ -409,6 +493,117 @@ export default function Layout() {
               )}
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mandatory PIN Registration Modal */}
+      <Dialog
+        open={pinModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleDismissPinModal()
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader className="text-left space-y-2">
+            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-1">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <DialogTitle className="text-xl font-bold">Cadastre seu PIN do Ponto</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
+              Esse PIN de 4 dígitos será usado para bater o ponto no tablet da entrada do
+              restaurante, sem precisar do celular.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            <div className="space-y-2">
+              <Label htmlFor="pin-input">Novo PIN (4 dígitos)</Label>
+              <div className="relative">
+                <Input
+                  id="pin-input"
+                  type={showPinInput ? 'text' : 'password'}
+                  placeholder="••••"
+                  value={pinValue}
+                  onChange={(e) => setPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  maxLength={4}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="pr-10 text-center text-lg tracking-widest font-mono"
+                  autoFocus
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  tabIndex={-1}
+                  className="absolute right-0 top-0 h-full px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-transparent"
+                  onClick={() => setShowPinInput(!showPinInput)}
+                >
+                  {showPinInput ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="pin-confirm-input">Confirmar PIN</Label>
+              <div className="relative">
+                <Input
+                  id="pin-confirm-input"
+                  type={showConfirmPinInput ? 'text' : 'password'}
+                  placeholder="••••"
+                  value={pinConfirmValue}
+                  onChange={(e) =>
+                    setPinConfirmValue(e.target.value.replace(/\D/g, '').slice(0, 4))
+                  }
+                  maxLength={4}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="pr-10 text-center text-lg tracking-widest font-mono"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSavePin()
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  tabIndex={-1}
+                  className="absolute right-0 top-0 h-full px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-transparent"
+                  onClick={() => setShowConfirmPinInput(!showConfirmPinInput)}
+                >
+                  {showConfirmPinInput ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex flex-col sm:flex-row-reverse sm:justify-between items-center gap-2 pt-2">
+            <Button
+              onClick={handleSavePin}
+              disabled={savingPin || pinValue.length !== 4 || pinConfirmValue.length !== 4}
+              className="w-full sm:w-auto"
+            >
+              {savingPin ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              {savingPin ? 'Salvando...' : 'Salvar PIN'}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={handleDismissPinModal}
+              disabled={savingPin}
+              className="w-full sm:w-auto text-muted-foreground hover:text-foreground"
+            >
+              Cadastrar depois
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </SidebarProvider>

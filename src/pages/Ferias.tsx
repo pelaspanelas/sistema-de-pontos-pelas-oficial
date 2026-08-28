@@ -138,8 +138,8 @@ export default function Ferias() {
     : ({
         id: profile?.id,
         name: profile?.name,
-        admission_date: profile?.admission_date,
-        created_at: profile?.created_at,
+        admission_date: (profile as any)?.admission_date,
+        created_at: (profile as any)?.created_at,
       } as UserData)
 
   const feriasUsuario = useMemo(() => {

@@ -244,7 +244,7 @@ export default function FolhaPagamentoDetalhes() {
         .order('created_at', { ascending: false })
 
       if (launchesErr) throw launchesErr
-      setLaunches(launchesData || [])
+      setLaunches((launchesData as any) || [])
     } catch (error) {
       toast({
         title: 'Erro',

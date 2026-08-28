@@ -229,13 +229,14 @@ export async function registrarPonto({
       throw err2
     }
   } else {
-    const { error: err3 } = await supabase.from('pontos_diarios').insert({
+    const insertObj: any = {
       profile_id: profileId,
       criado_por: profileId,
       data,
-      [colName]: horario,
       tipo_registro: 'automático',
-    })
+    }
+    insertObj[colName] = horario
+    const { error: err3 } = await supabase.from('pontos_diarios').insert(insertObj)
     if (err3) {
       console.error('[registrarPonto] Failed to insert pontos_diarios:', err3)
       throw err3

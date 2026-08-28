@@ -89,13 +89,14 @@ async function syncPontosDiarios(
     const { error } = await supabase.from('pontos_diarios').update(updates).eq('id', diario.id)
     if (error) throw error
   } else {
-    const { error } = await supabase.from('pontos_diarios').insert({
+    const insertObj: any = {
       profile_id: usuarioId,
       criado_por: managerId,
       data,
-      [colName]: horario,
       tipo_registro: 'manual',
-    })
+    }
+    insertObj[colName] = horario
+    const { error } = await supabase.from('pontos_diarios').insert(insertObj)
     if (error) throw error
   }
 }

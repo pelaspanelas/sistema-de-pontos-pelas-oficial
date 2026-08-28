@@ -46,12 +46,12 @@ export default function Feriados() {
     try {
       setLoading(true)
       const { data, error } = await supabase
-        .from('feriados' as any)
+        .from('feriados')
         .select('*')
         .order('data', { ascending: true })
 
       if (error) throw error
-      setFeriados(data || [])
+      setFeriados((data as any) || [])
     } catch (err: any) {
       toast({ title: 'Erro', description: err.message, variant: 'destructive' })
     } finally {
@@ -63,10 +63,10 @@ export default function Feriados() {
     e.preventDefault()
     setSaving(true)
     try {
-      const { error } = await supabase.from('feriados' as any).insert({
+      const { error } = await supabase.from('feriados').insert({
         nome: form.nome,
         data: form.data,
-      })
+      } as any)
       if (error) throw error
       toast({ title: 'Feriado adicionado com sucesso!' })
       setIsOpen(false)
@@ -82,10 +82,7 @@ export default function Feriados() {
   async function handleDelete(id: string) {
     if (!confirm('Deseja remover este feriado?')) return
     try {
-      const { error } = await supabase
-        .from('feriados' as any)
-        .delete()
-        .eq('id', id)
+      const { error } = await supabase.from('feriados').delete().eq('id', id)
       if (error) throw error
       toast({ title: 'Feriado removido.' })
       fetchFeriados()
