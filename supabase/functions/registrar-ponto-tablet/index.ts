@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { AwsClient } from 'npm:aws4fetch'
 import { corsHeaders } from './cors.ts'
 
 interface LookupRequest {
@@ -101,7 +102,11 @@ function calcularHorasTrabalhadas(
 }
 
 // Converte base64 (dataUrl ou raw) para Uint8Array
-function base64ToUint8Array(base64Data: string): { bytes: Uint8Array; contentType: string } {
+function base64ToUint8Array(base64Data: string): {
+  bytes: Uint8Array
+  contentType: string
+  rawBase64: string
+} {
   let raw = base64Data
   let contentType = 'image/jpeg'
 
@@ -121,7 +126,172 @@ function base64ToUint8Array(base64Data: string): { bytes: Uint8Array; contentTyp
     bytes[i] = binaryStr.charCodeAt(i)
   }
 
-  return { bytes, contentType }
+  return { bytes, contentType, rawBase64: raw }
+}
+
+// Helper para converter ArrayBuffer em string base64 padrão
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = ''
+  const bytes = new Uint8Array(buffer)
+  const len = bytes.byteLength
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
+// Reconhecimento facial em modo sombra (não bloqueante) com AWS Rekognition
+async function compararFacialSombra(
+  avatarUrl: string | null | undefined,
+  targetRawBase64: string,
+): Promise<number | null> {
+  if (!avatarUrl || !avatarUrl.trim()) {
+    return null
+  }
+
+  const awsAccessKeyId = Deno.env.get('AWS_ACCESS_KEY_ID')
+  const awsSecretAccessKey = Deno.env.get('AWS_SECRET_ACCESS_KEY')
+  const awsRegion = Deno.env.get('AWS_REGION') || 'us-east-1'
+
+  if (!awsAccessKeyId || !awsSecretAccessKey) {
+    console.warn('Credenciais AWS não configuradas para comparação facial em modo sombra')
+    return null
+  }
+
+  try {
+    // 1. Download da foto de referência (SourceImage)
+    const avatarResponse = await fetch(avatarUrl)
+    if (!avatarResponse.ok) {
+      console.warn(
+        `Não foi possível baixar foto de referência de ${avatarUrl}: status ${avatarResponse.status}`,
+      )
+      return null
+    }
+
+    const avatarArrayBuffer = await avatarResponse.arrayBuffer()
+    const sourceBase64 = arrayBufferToBase64(avatarArrayBuffer)
+
+    // 2. Inicializa o cliente aws4fetch
+    const aws = new AwsClient({
+      accessKeyId: awsAccessKeyId,
+      secretAccessKey: awsSecretAccessKey,
+      region: awsRegion,
+      service: 'rekognition',
+    })
+
+    const rekognitionEndpoint = `https://rekognition.${awsRegion}.amazonaws.com/`
+
+    const requestBody = {
+      SourceImage: {
+        Bytes: sourceBase64,
+      },
+      TargetImage: {
+        Bytes: targetRawBase64,
+      },
+      SimilarityThreshold: 0,
+    }
+
+    const response = await aws.fetch(rekognitionEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-amz-json-1.1',
+        'X-Amz-Target': 'RekognitionService.CompareFaces',
+      },
+      body: JSON.stringify(requestBody),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.warn('AWS Rekognition retornou erro não bloqueante:', response.status, errorText)
+
+      // Verificar se o erro indica especificamente que nenhum rosto foi detectado na imagem de origem ou destino
+      // Exemplos de erro do Rekognition:
+      // {"__type":"InvalidParameterException","Message":"There are no faces in the image."}
+      // {"__type":"InvalidParameterException","Message":"SourceImage face not detected."}
+      // {"__type":"InvalidParameterException","Message":"TargetImage face not detected."}
+      try {
+        const errorJson = JSON.parse(errorText)
+        const errorType = errorJson.__type || errorJson.code || errorJson.name || ''
+        const errorMsg = (errorJson.Message || errorJson.message || errorText).toLowerCase()
+
+        const isFaceNotDetected =
+          errorType.includes('InvalidParameterException') &&
+          (errorMsg.includes('no face') ||
+            errorMsg.includes('not detected') ||
+            errorMsg.includes('face not') ||
+            errorMsg.includes('faces in the image') ||
+            errorMsg.includes('sem rosto') ||
+            errorMsg.includes('nenhum rosto'))
+
+        // Também verificar se a mensagem em texto puro contém menção explícita de ausência de face
+        const textLower = errorText.toLowerCase()
+        const isGenericFaceNotDetected =
+          textLower.includes('there are no faces') ||
+          textLower.includes('no faces in the image') ||
+          textLower.includes('face not detected') ||
+          textLower.includes('no faces detected') ||
+          textLower.includes('sourceimage face not detected') ||
+          textLower.includes('targetimage face not detected')
+
+        if (isFaceNotDetected || isGenericFaceNotDetected) {
+          console.info('AWS Rekognition: nenhum rosto detectado na foto (-1)')
+          return -1
+        }
+      } catch {
+        const textLower = errorText.toLowerCase()
+        if (
+          textLower.includes('there are no faces') ||
+          textLower.includes('no faces in the image') ||
+          textLower.includes('face not detected') ||
+          textLower.includes('no faces detected') ||
+          textLower.includes('sourceimage face not detected') ||
+          textLower.includes('targetimage face not detected')
+        ) {
+          console.info('AWS Rekognition: nenhum rosto detectado na foto (-1)')
+          return -1
+        }
+      }
+
+      return null
+    }
+
+    const data = await response.json()
+    const faceMatches = data.FaceMatches
+
+    if (Array.isArray(faceMatches) && faceMatches.length > 0) {
+      // Pega a maior similaridade entre as correspondências encontradas
+      let maxSimilarity = 0
+      for (const match of faceMatches) {
+        if (typeof match.Similarity === 'number' && match.Similarity > maxSimilarity) {
+          maxSimilarity = match.Similarity
+        }
+      }
+      return maxSimilarity
+    }
+
+    // Se a AWS respondeu sem erro mas sem FaceMatches (rosto não bateu ou não foi detectado correspondente)
+    return 0
+  } catch (faceErr) {
+    console.warn(
+      'Erro ao processar comparação facial em modo sombra (ignorado com sucesso):',
+      faceErr,
+    )
+
+    // Se porventura a exceção lançada contiver a mensagem de face não detectada
+    const errMessage = (faceErr instanceof Error ? faceErr.message : String(faceErr)).toLowerCase()
+    if (
+      errMessage.includes('there are no faces') ||
+      errMessage.includes('no faces in the image') ||
+      errMessage.includes('face not detected') ||
+      errMessage.includes('no faces detected') ||
+      errMessage.includes('sourceimage face not detected') ||
+      errMessage.includes('targetimage face not detected')
+    ) {
+      return -1
+    }
+
+    return null
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -344,7 +514,7 @@ Deno.serve(async (req: Request) => {
       // Busca perfil do colaborador
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, name, status, almoco_automatico')
+        .select('id, name, status, almoco_automatico, avatar_url')
         .eq('id', profile_id)
         .maybeSingle()
 
@@ -367,7 +537,28 @@ Deno.serve(async (req: Request) => {
       const dataHoraIso = new Date().toISOString()
       const timestampMs = Date.now()
 
-      // 2. Checagem de Férias ativas (tabela ferias)
+      // 2. Busca registro diário existente de hoje
+      const { data: pontoDiario, error: diarioError } = await supabase
+        .from('pontos_diarios')
+        .select('*')
+        .eq('profile_id', profile.id)
+        .eq('data', dataHoje)
+        .maybeSingle()
+
+      if (diarioError && diarioError.code !== 'PGRST116') {
+        console.error('Erro ao consultar pontos_diarios:', diarioError)
+      }
+
+      const registrosDoDia = pontoDiario
+        ? {
+            entrada: pontoDiario.entrada || null,
+            saida_almoco: pontoDiario.saida_almoco || null,
+            retorno_almoco: pontoDiario.retorno_almoco || null,
+            saida: pontoDiario.saida || null,
+          }
+        : null
+
+      // 3. Checagem de Férias ativas (tabela ferias)
       const { data: feriasAtivas } = await supabase
         .from('ferias')
         .select('id, data_inicio, data_fim, status')
@@ -380,8 +571,11 @@ Deno.serve(async (req: Request) => {
       if (feriasAtivas) {
         return new Response(
           JSON.stringify({
-            error: `Colaborador está em período de férias de ${feriasAtivas.data_inicio} até ${feriasAtivas.data_fim}`,
+            error: `Colaborador está em período de férias de ${feriasAtivas.data_inicio} até ${feriasAtivas.data_fim}.`,
             code: 'FERIAS_ATIVAS',
+            is_business_error: true,
+            nome_colaborador: profile.name,
+            registros_dia: registrosDoDia,
           }),
           {
             status: 400,
@@ -390,44 +584,7 @@ Deno.serve(async (req: Request) => {
         )
       }
 
-      // 3. Upload da foto para o bucket pontos_fotos: {profile_id}/{timestamp}.jpg
-      const { bytes, contentType } = base64ToUint8Array(foto_base64)
-      const filePath = `${profile.id}/${timestampMs}.jpg`
-
-      const { error: uploadError } = await supabase.storage
-        .from('pontos_fotos')
-        .upload(filePath, bytes, {
-          contentType,
-          upsert: true,
-        })
-
-      if (uploadError) {
-        console.error('Erro no upload da foto do ponto:', uploadError)
-        return new Response(
-          JSON.stringify({ error: 'Falha ao salvar foto do ponto: ' + uploadError.message }),
-          {
-            status: 500,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          },
-        )
-      }
-
-      const { data: urlData } = supabase.storage.from('pontos_fotos').getPublicUrl(filePath)
-      const fotoUrl = urlData?.publicUrl || null
-
-      // 4. Busca registro diário existente de hoje
-      const { data: pontoDiario, error: diarioError } = await supabase
-        .from('pontos_diarios')
-        .select('*')
-        .eq('profile_id', profile.id)
-        .eq('data', dataHoje)
-        .maybeSingle()
-
-      if (diarioError && diarioError.code !== 'PGRST116') {
-        console.error('Erro ao consultar pontos_diarios:', diarioError)
-      }
-
-      // 5. Determinação do próximo tipo de ponto
+      // 4. Determinação do próximo tipo de ponto
       let tipoPonto = ''
       let tipoPontoDescricao = ''
       const almocoAuto = !!profile.almoco_automatico
@@ -445,6 +602,9 @@ Deno.serve(async (req: Request) => {
             JSON.stringify({
               error: 'Todos os pontos do dia já foram registrados.',
               code: 'PONTOS_COMPLETOS',
+              is_business_error: true,
+              nome_colaborador: profile.name,
+              registros_dia: registrosDoDia,
             }),
             {
               status: 400,
@@ -468,6 +628,9 @@ Deno.serve(async (req: Request) => {
             JSON.stringify({
               error: 'Todos os pontos do dia já foram registrados.',
               code: 'PONTOS_COMPLETOS',
+              is_business_error: true,
+              nome_colaborador: profile.name,
+              registros_dia: registrosDoDia,
             }),
             {
               status: 400,
@@ -477,7 +640,35 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // 6. Inserção na tabela pontos (batida principal com foto)
+      // 5. Upload da foto para o bucket pontos_fotos: {profile_id}/{timestamp}.jpg
+      const { bytes, contentType, rawBase64 } = base64ToUint8Array(foto_base64)
+      const filePath = `${profile.id}/${timestampMs}.jpg`
+
+      const { error: uploadError } = await supabase.storage
+        .from('pontos_fotos')
+        .upload(filePath, bytes, {
+          contentType,
+          upsert: true,
+        })
+
+      if (uploadError) {
+        console.error('Erro no upload da foto do ponto:', uploadError)
+        return new Response(
+          JSON.stringify({ error: 'Falha ao salvar foto do ponto: ' + uploadError.message }),
+          {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          },
+        )
+      }
+
+      const { data: urlData } = supabase.storage.from('pontos_fotos').getPublicUrl(filePath)
+      const fotoUrl = urlData?.publicUrl || null
+
+      // 5.1 Reconhecimento facial em modo sombra (não bloqueante)
+      const faceMatchScore = await compararFacialSombra(profile.avatar_url, rawBase64)
+
+      // 6. Inserção na tabela pontos (batida principal com foto e score de similaridade facial)
       const { error: pontoInsertError } = await supabase.from('pontos').insert({
         profile_id: profile.id,
         criado_por: profile.id,
@@ -486,6 +677,7 @@ Deno.serve(async (req: Request) => {
         tipo_ponto: tipoPonto,
         horario: horarioAtual,
         foto_url: fotoUrl,
+        face_match_score: faceMatchScore,
         origem: 'tablet_recepcao',
         device_id: tablet.id,
         metodo_auth: 'pin',
