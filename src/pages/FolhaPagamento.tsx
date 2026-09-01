@@ -149,10 +149,13 @@ export default function FolhaPagamento() {
         { data: profiles, error: errProfiles },
         { data: pontos, error: errPontos },
         { data: launches, error: errLaunches },
+        { data: historicoSnapshots },
       ] = await Promise.all([
         supabase
           .from('profiles')
-          .select('id, name, role, base_salary, cpf, valor_vt, admission_date, status'),
+          .select(
+            'id, name, role, base_salary, cpf, valor_vt, admission_date, status, entra_folha' as any,
+          ),
         supabase
           .from('pontos_diarios')
           .select('profile_id, horas_calculadas')
@@ -161,6 +164,11 @@ export default function FolhaPagamento() {
         supabase
           .from('lancamentos_folha')
           .select('id, profile_id, categoria, valor, descricao, tipo')
+          .eq('mes', Number(month))
+          .eq('ano', Number(year)),
+        supabase
+          .from('historico_competencia_folha' as any)
+          .select('profile_id, base_salary, valor_vt, role, name, cpf')
           .eq('mes', Number(month))
           .eq('ano', Number(year)),
       ])
@@ -188,7 +196,16 @@ export default function FolhaPagamento() {
         })
       })
 
-      const validProfiles = (profiles || []).filter((p) => {
+      const snapshotsByProfile: Record<string, any> = {}
+      if (historicoSnapshots) {
+        ;(historicoSnapshots as any[]).forEach((h) => {
+          snapshotsByProfile[h.profile_id] = h
+        })
+      }
+
+      const validProfiles = ((profiles as any[]) || []).filter((p) => {
+        // Must have entra_folha enabled (or default true if null/undefined)
+        if (p.entra_folha === false) return false
         if (p.status !== 'Ativo') return false
         if (p.admission_date) {
           return p.admission_date <= endDate
@@ -196,11 +213,20 @@ export default function FolhaPagamento() {
         return true
       })
 
+      const isMonthClosed = !!fechamento
+
       const payroll: PayrollItem[] = validProfiles
         .map((p) => {
           const totalHours = hoursByProfile[p.id] || 0
-          const baseSalary = Number(p.base_salary) || 0
-          const valorVt = Number(p.valor_vt) || 0
+          const snap = snapshotsByProfile[p.id]
+
+          // If month is closed and we have snapshot data, use immutable historical base_salary and valor_vt
+          const baseSalary =
+            isMonthClosed && snap ? Number(snap.base_salary) || 0 : Number(p.base_salary) || 0
+
+          const valorVt =
+            isMonthClosed && snap ? Number(snap.valor_vt) || 0 : Number(p.valor_vt) || 0
+
           const userLaunches = launchesByProfile[p.id] || []
 
           let credits = 0
@@ -300,8 +326,37 @@ export default function FolhaPagamento() {
         fechado_por: profile?.id,
       })
       if (error) throw error
+
+      // Save snapshots for all active profiles entering payroll
+      const { data: profilesToSnapshot } = await supabase
+        .from('profiles')
+        .select('id, name, role, cpf, base_salary, valor_vt, entra_folha, status')
+        .eq('status', 'Ativo')
+
+      if (profilesToSnapshot && profilesToSnapshot.length > 0) {
+        const snapshots = (profilesToSnapshot as any[])
+          .filter((p) => p.entra_folha !== false)
+          .map((p) => ({
+            profile_id: p.id,
+            mes: Number(month),
+            ano: Number(year),
+            base_salary: Number(p.base_salary) || 0,
+            valor_vt: Number(p.valor_vt) || 0,
+            role: p.role || null,
+            name: p.name || null,
+            cpf: p.cpf || null,
+          }))
+
+        if (snapshots.length > 0) {
+          await supabase
+            .from('historico_competencia_folha' as any)
+            .upsert(snapshots, { onConflict: 'profile_id,mes,ano' })
+        }
+      }
+
       toast({ title: 'Mês finalizado com sucesso!' })
       setIsClosed(true)
+      fetchData()
     } catch (e: any) {
       toast({ title: 'Erro', description: e.message, variant: 'destructive' })
     } finally {

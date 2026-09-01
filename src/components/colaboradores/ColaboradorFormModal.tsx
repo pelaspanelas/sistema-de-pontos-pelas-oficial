@@ -80,6 +80,7 @@ export function ColaboradorFormModal({
     almoco_automatico: false,
     loja_id: null,
     pin_ponto: '',
+    entra_folha: true,
   })
 
   useEffect(() => {
@@ -136,6 +137,7 @@ export function ColaboradorFormModal({
             almoco_automatico: p.almoco_automatico || false,
             loja_id: p.loja_id || null,
             pin_ponto: p.pin_ponto || '',
+            entra_folha: (p as any).entra_folha ?? true,
           })
         }
         setFetching(false)
@@ -171,6 +173,7 @@ export function ColaboradorFormModal({
         almoco_automatico: false,
         loja_id: null,
         pin_ponto: '',
+        entra_folha: true,
       })
     }
   }, [open, colaboradorId])
@@ -215,13 +218,17 @@ export function ColaboradorFormModal({
           p_loja_id: formData.loja_id || null,
           p_almoco_automatico: formData.almoco_automatico,
           p_pin_ponto: cleanedPin || null,
+          p_entra_folha: formData.entra_folha ?? true,
         }
         const { error } = await supabase.rpc('update_user_account', args)
         if (error) throw error
 
         const { error: errorBanco } = await supabase
           .from('profiles')
-          .update({ banco_horas_ativo: formData.banco_horas_ativo })
+          .update({
+            banco_horas_ativo: formData.banco_horas_ativo,
+            entra_folha: formData.entra_folha ?? true,
+          } as any)
           .eq('id', formData.id)
         if (errorBanco) throw errorBanco
 
@@ -252,6 +259,7 @@ export function ColaboradorFormModal({
           p_permissions: formData.permissions,
           p_loja_id: formData.loja_id || null,
           p_pin_ponto: cleanedPin || null,
+          p_entra_folha: formData.entra_folha ?? true,
         }
         const { data: newUserId, error } = await supabase.rpc('create_user_account', args)
         if (error) throw error
@@ -262,7 +270,8 @@ export function ColaboradorFormModal({
             .update({
               banco_horas_ativo: formData.banco_horas_ativo,
               almoco_automatico: formData.almoco_automatico,
-            })
+              entra_folha: formData.entra_folha ?? true,
+            } as any)
             .eq('id', newUserId)
           if (errorBanco) throw errorBanco
         }

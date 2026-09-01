@@ -39,4 +39,5 @@ export interface ColaboradorFormState {
   almoco_automatico: boolean
   loja_id?: string | null
   pin_ponto?: string
+  entra_folha: boolean
 }

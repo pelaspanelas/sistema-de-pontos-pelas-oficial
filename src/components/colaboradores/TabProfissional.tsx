@@ -117,6 +117,23 @@ export function TabProfissional({
           PIN de 4 dígitos para registro de ponto no tablet.
         </p>
       </div>
+      <div className="space-y-2 flex flex-col justify-between">
+        <div>
+          <Label>Entra na Folha?</Label>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Define se o colaborador aparece nos relatórios e cálculos da folha de pagamento.
+          </p>
+        </div>
+        <div className="flex items-center space-x-3 pt-1">
+          <Switch
+            checked={data.entra_folha ?? true}
+            onCheckedChange={(v) => onChange({ ...data, entra_folha: v })}
+          />
+          <span className="text-sm font-medium">
+            {(data.entra_folha ?? true) ? 'Sim (Incluído)' : 'Não (Ignorado)'}
+          </span>
+        </div>
+      </div>
       <div className="col-span-2 mt-2">
         <div className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
           <div className="space-y-0.5">

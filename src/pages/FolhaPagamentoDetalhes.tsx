@@ -140,18 +140,48 @@ export default function FolhaPagamentoDetalhes() {
           setHoleriteCopies((settings as any).holerite_copies)
       }
 
-      const { data: profileData, error: profileErr } = await supabase
-        .from('profiles')
-        .select(
-          'id, name, role, cpf, admission_date, base_salary, banco_horas_ativo, valor_vt, email, phone',
-        )
-        .eq('id', id)
-        .single()
-      if (profileErr) throw profileErr
-      setProfile(profileData)
+      const isMonthClosed = !!fechamento
 
-      if (profileData.valor_vt && Number(profileData.valor_vt) > 0) {
-        setDailyVt(profileData.valor_vt.toString())
+      const [{ data: profileData, error: profileErr }, { data: snapshotData }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select(
+            'id, name, role, cpf, admission_date, base_salary, banco_horas_ativo, valor_vt, email, phone',
+          )
+          .eq('id', id)
+          .single(),
+        supabase
+          .from('historico_competencia_folha' as any)
+          .select('base_salary, valor_vt, role, name, cpf')
+          .eq('profile_id', id)
+          .eq('mes', month)
+          .eq('ano', year)
+          .maybeSingle(),
+      ])
+
+      if (profileErr) throw profileErr
+
+      // If month is closed and there is snapshot data, override base_salary and valor_vt with snapshot
+      const finalBaseSalary =
+        isMonthClosed && (snapshotData as any)
+          ? Number((snapshotData as any).base_salary)
+          : profileData.base_salary
+
+      const finalValorVt =
+        isMonthClosed && (snapshotData as any)
+          ? Number((snapshotData as any).valor_vt)
+          : profileData.valor_vt
+
+      const effectiveProfile: Profile = {
+        ...profileData,
+        base_salary: finalBaseSalary,
+        valor_vt: finalValorVt,
+      }
+
+      setProfile(effectiveProfile)
+
+      if (effectiveProfile.valor_vt && Number(effectiveProfile.valor_vt) > 0) {
+        setDailyVt(effectiveProfile.valor_vt.toString())
       }
 
       const startDate = `${year}-${month.toString().padStart(2, '0')}-01`
