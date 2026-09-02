@@ -43,6 +43,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PaySlipPrint } from '@/components/folha-pagamento/PaySlipPrint'
 import {
+  FinancialBreakdownModal,
+  EmployeeFinancialDetail,
+} from '@/components/folha-pagamento/FinancialBreakdownModal'
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -105,6 +109,9 @@ export default function FolhaPagamento() {
   const [savingSettings, setSavingSettings] = useState(false)
   const [confirmClearOpen, setConfirmClearOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [activeModal, setActiveModal] = useState<
+    'salarios' | 'vt' | 'extras' | 'descontos' | 'total' | 'decimo3' | 'ferias' | null
+  >(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { toast } = useToast()
@@ -300,6 +307,196 @@ export default function FolhaPagamento() {
 
   const provision13 = sumBaseSalaries / 12
   const provisionVacation = provision13 / 3
+
+  // Modal breakdowns
+  const salariosBreakdown: EmployeeFinancialDetail[] = data
+    .filter((d) => d.baseSalary > 0)
+    .map((d) => ({
+      profileId: d.profileId,
+      name: d.name,
+      role: d.role,
+      total: d.baseSalary,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const vtBreakdown: EmployeeFinancialDetail[] = data
+    .map((d) => {
+      const vtLaunches = d.launches.filter(
+        (l) => l.categoria === 'credito' && l.tipo.toLowerCase() === 'vt',
+      )
+      const total = vtLaunches.reduce((sum, l) => sum + l.valor, 0)
+      return {
+        profileId: d.profileId,
+        name: d.name,
+        role: d.role,
+        total,
+        items: vtLaunches.map((l) => ({
+          id: l.id,
+          description: l.descricao || 'Vale Transporte',
+          amount: l.valor,
+          type: l.tipo,
+          category: l.categoria,
+        })),
+      }
+    })
+    .filter((d) => d.total > 0)
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const extrasBreakdown: EmployeeFinancialDetail[] = data
+    .map((d) => {
+      const extraLaunches = d.launches.filter((l) => {
+        if (l.categoria !== 'credito') return false
+        const tipo = l.tipo.toLowerCase()
+        return tipo === 'hora_extra' || tipo === 'bonus'
+      })
+      const total = extraLaunches.reduce((sum, l) => sum + l.valor, 0)
+      return {
+        profileId: d.profileId,
+        name: d.name,
+        role: d.role,
+        total,
+        items: extraLaunches.map((l) => ({
+          id: l.id,
+          description: l.descricao || (l.tipo === 'hora_extra' ? 'Hora Extra' : 'Bônus'),
+          amount: l.valor,
+          type: l.tipo,
+          category: l.categoria,
+        })),
+      }
+    })
+    .filter((d) => d.total > 0)
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const discountsBreakdown: EmployeeFinancialDetail[] = data
+    .map((d) => {
+      const discountLaunches = d.launches.filter((l) => {
+        if (l.categoria !== 'debito') return false
+        return l.tipo.toLowerCase() !== 'vale'
+      })
+      const total = discountLaunches.reduce((sum, l) => sum + l.valor, 0)
+      return {
+        profileId: d.profileId,
+        name: d.name,
+        role: d.role,
+        total,
+        items: discountLaunches.map((l) => ({
+          id: l.id,
+          description: l.descricao || 'Desconto',
+          amount: l.valor,
+          type: l.tipo,
+          category: l.categoria,
+        })),
+      }
+    })
+    .filter((d) => d.total > 0)
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const totalFolhaBreakdown: EmployeeFinancialDetail[] = data
+    .map((d) => {
+      const vt = d.launches
+        .filter((l) => l.categoria === 'credito' && l.tipo.toLowerCase() === 'vt')
+        .reduce((sum, l) => sum + l.valor, 0)
+      const extras = d.launches
+        .filter((l) => {
+          if (l.categoria !== 'credito') return false
+          const tipo = l.tipo.toLowerCase()
+          return tipo === 'hora_extra' || tipo === 'bonus'
+        })
+        .reduce((sum, l) => sum + l.valor, 0)
+      const discounts = d.launches
+        .filter((l) => l.categoria === 'debito' && l.tipo.toLowerCase() !== 'vale')
+        .reduce((sum, l) => sum + l.valor, 0)
+
+      const cost = d.baseSalary + vt + extras - discounts
+
+      const items: Array<{
+        id: string
+        description: string
+        amount: number
+        type?: string
+        category?: 'credito' | 'debito'
+      }> = [
+        {
+          id: 'base',
+          description: 'Salário Base',
+          amount: d.baseSalary,
+          category: 'credito' as const,
+        },
+      ]
+
+      if (vt > 0) {
+        items.push({
+          id: 'vt',
+          description: 'Vale Transporte',
+          amount: vt,
+          category: 'credito' as const,
+        })
+      }
+
+      if (extras > 0) {
+        items.push({
+          id: 'extras',
+          description: 'Horas Extras e Bônus',
+          amount: extras,
+          category: 'credito' as const,
+        })
+      }
+
+      if (discounts > 0) {
+        items.push({
+          id: 'discounts',
+          description: 'Descontos (exceto adiantamento)',
+          amount: discounts,
+          category: 'debito' as const,
+        })
+      }
+
+      return {
+        profileId: d.profileId,
+        name: d.name,
+        role: d.role,
+        total: cost,
+        items,
+      }
+    })
+    .filter((d) => d.total > 0)
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const decimo3Breakdown: EmployeeFinancialDetail[] = data
+    .filter((d) => d.baseSalary > 0)
+    .map((d) => ({
+      profileId: d.profileId,
+      name: d.name,
+      role: d.role,
+      total: d.baseSalary / 12,
+      items: [
+        {
+          id: 'calc',
+          description: `Salário Base (${formatCurrency(d.baseSalary)}) ÷ 12 meses`,
+          amount: d.baseSalary / 12,
+          category: 'credito' as const,
+        },
+      ],
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const feriasBreakdown: EmployeeFinancialDetail[] = data
+    .filter((d) => d.baseSalary > 0)
+    .map((d) => ({
+      profileId: d.profileId,
+      name: d.name,
+      role: d.role,
+      total: d.baseSalary / 12 / 3,
+      items: [
+        {
+          id: 'calc',
+          description: `Provisão 13º (${formatCurrency(d.baseSalary / 12)}) ÷ 3 (1/3 constitucional)`,
+          amount: d.baseSalary / 12 / 3,
+          category: 'credito' as const,
+        },
+      ],
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   function formatCurrency(val: number) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
@@ -619,14 +816,22 @@ export default function FolhaPagamento() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-3 mb-6">
-          <Card className="bg-primary text-primary-foreground">
+          <Card
+            className="bg-primary text-primary-foreground cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.01] active:scale-[0.99]"
+            onClick={() => setActiveModal('total')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total da Folha</CardTitle>
               <DollarSign className="h-4 w-4 opacity-75" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(totalCost)}</div>
-              <p className="text-xs opacity-75 mt-1">Estimativa de custos do período</p>
+              <p className="text-xs opacity-75 mt-1 flex items-center justify-between">
+                <span>Estimativa de custos do período</span>
+                <span className="text-[11px] font-medium underline opacity-90">
+                  Ver composição →
+                </span>
+              </p>
             </CardContent>
           </Card>
           <Card>
@@ -653,77 +858,133 @@ export default function FolhaPagamento() {
 
         <h3 className="text-lg font-medium tracking-tight mb-4">Detalhamento Financeiro</h3>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-6">
-          <Card>
+          <Card
+            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary/50 hover:scale-[1.01] active:scale-[0.99] group"
+            onClick={() => setActiveModal('salarios')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Soma de Salários</CardTitle>
-              <Wallet className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium group-hover:text-primary transition-colors">
+                Soma de Salários
+              </CardTitle>
+              <Wallet className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(sumBaseSalaries)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Salários base do período</p>
+              <p className="text-xs text-muted-foreground mt-1 flex items-center justify-between">
+                <span>Salários base do período</span>
+                <span className="text-[11px] font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                  Ver detalhes →
+                </span>
+              </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary/50 hover:scale-[1.01] active:scale-[0.99] group"
+            onClick={() => setActiveModal('vt')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Soma de VT</CardTitle>
-              <Bus className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium group-hover:text-primary transition-colors">
+                Soma de VT
+              </CardTitle>
+              <Bus className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(sumVt)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Vale transporte total projetado</p>
+              <p className="text-xs text-muted-foreground mt-1 flex items-center justify-between">
+                <span>Vale transporte total projetado</span>
+                <span className="text-[11px] font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                  Ver detalhes →
+                </span>
+              </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-emerald-500/50 hover:scale-[1.01] active:scale-[0.99] group"
+            onClick={() => setActiveModal('extras')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Horas Extras e Bônus</CardTitle>
+              <CardTitle className="text-sm font-medium group-hover:text-emerald-600 transition-colors">
+                Horas Extras e Bônus
+              </CardTitle>
               <TrendingUp className="h-4 w-4 text-emerald-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-emerald-600">
                 {formatCurrency(sumOvertime)}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Total de horas extras e premiações
+              <p className="text-xs text-muted-foreground mt-1 flex items-center justify-between">
+                <span>Total de horas extras e premiações</span>
+                <span className="text-[11px] font-medium text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Ver detalhes →
+                </span>
               </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-rose-500/50 hover:scale-[1.01] active:scale-[0.99] group"
+            onClick={() => setActiveModal('descontos')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Soma de Descontos</CardTitle>
+              <CardTitle className="text-sm font-medium group-hover:text-rose-600 transition-colors">
+                Soma de Descontos
+              </CardTitle>
               <TrendingDown className="h-4 w-4 text-rose-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-rose-600">{formatCurrency(sumDiscounts)}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Débitos aplicados (exceto adiantamento 40%)
+              <p className="text-xs text-muted-foreground mt-1 flex items-center justify-between">
+                <span>Débitos (exceto adiantamento)</span>
+                <span className="text-[11px] font-medium text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Ver detalhes →
+                </span>
               </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-amber-500/50 hover:scale-[1.01] active:scale-[0.99] group"
+            onClick={() => setActiveModal('decimo3')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">13º Salário Projetado</CardTitle>
+              <CardTitle className="text-sm font-medium group-hover:text-amber-600 transition-colors">
+                13º Salário Projetado
+              </CardTitle>
               <CalendarDays className="h-4 w-4 text-amber-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-amber-600">{formatCurrency(provision13)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Provisão mensal base</p>
+              <p className="text-xs text-muted-foreground mt-1 flex items-center justify-between">
+                <span>Provisão mensal base</span>
+                <span className="text-[11px] font-medium text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Ver detalhes →
+                </span>
+              </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-sky-500/50 hover:scale-[1.01] active:scale-[0.99] group"
+            onClick={() => setActiveModal('ferias')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Férias Projetadas</CardTitle>
+              <CardTitle className="text-sm font-medium group-hover:text-sky-600 transition-colors">
+                Férias Projetadas
+              </CardTitle>
               <Palmtree className="h-4 w-4 text-sky-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-sky-600">
                 {formatCurrency(provisionVacation)}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Provisão do terço de férias</p>
+              <p className="text-xs text-muted-foreground mt-1 flex items-center justify-between">
+                <span>Provisão do terço de férias</span>
+                <span className="text-[11px] font-medium text-sky-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Ver detalhes →
+                </span>
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -776,6 +1037,105 @@ export default function FolhaPagamento() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Modais de Detalhamento Financeiro */}
+        <FinancialBreakdownModal
+          isOpen={activeModal === 'salarios'}
+          onClose={() => setActiveModal(null)}
+          title="Detalhamento da Soma de Salários"
+          subtitle={`Salário base de cada colaborador para ${monthName} de ${year}.`}
+          monthName={monthName}
+          year={year}
+          totalSum={sumBaseSalaries}
+          colorClass="text-primary"
+          emptyMessage="Nenhum colaborador com salário base cadastrado no período."
+          data={salariosBreakdown}
+          icon={<Wallet className="h-6 w-6 text-primary" />}
+        />
+
+        <FinancialBreakdownModal
+          isOpen={activeModal === 'vt'}
+          onClose={() => setActiveModal(null)}
+          title="Detalhamento da Soma de VT"
+          subtitle={`Valores e lançamentos de Vale Transporte de cada colaborador para ${monthName} de ${year}.`}
+          monthName={monthName}
+          year={year}
+          totalSum={sumVt}
+          colorClass="text-primary"
+          emptyMessage="Nenhum lançamento de Vale Transporte encontrado para este período."
+          data={vtBreakdown}
+          icon={<Bus className="h-6 w-6 text-primary" />}
+        />
+
+        <FinancialBreakdownModal
+          isOpen={activeModal === 'extras'}
+          onClose={() => setActiveModal(null)}
+          title="Detalhamento de Horas Extras e Bônus"
+          subtitle={`Lançamentos de horas extras e premiações por colaborador para ${monthName} de ${year}.`}
+          monthName={monthName}
+          year={year}
+          totalSum={sumOvertime}
+          colorClass="text-emerald-600 dark:text-emerald-400"
+          emptyMessage="Nenhum lançamento de horas extras ou bônus encontrado para este período."
+          data={extrasBreakdown}
+          icon={<TrendingUp className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />}
+        />
+
+        <FinancialBreakdownModal
+          isOpen={activeModal === 'descontos'}
+          onClose={() => setActiveModal(null)}
+          title="Detalhamento da Soma de Descontos"
+          subtitle={`Descontos e débitos aplicados por colaborador (excluindo adiantamento quinzenal de 40%).`}
+          monthName={monthName}
+          year={year}
+          totalSum={sumDiscounts}
+          colorClass="text-rose-600 dark:text-rose-400"
+          emptyMessage="Nenhum desconto registrado para este período."
+          data={discountsBreakdown}
+          icon={<TrendingDown className="h-6 w-6 text-rose-600 dark:text-rose-400" />}
+        />
+
+        <FinancialBreakdownModal
+          isOpen={activeModal === 'total'}
+          onClose={() => setActiveModal(null)}
+          title="Detalhamento do Total da Folha"
+          subtitle={`Composição do custo total por colaborador (Salário Base + VT + Extras/Bônus - Descontos).`}
+          monthName={monthName}
+          year={year}
+          totalSum={totalCost}
+          colorClass="text-primary"
+          emptyMessage="Nenhum custo registrado para os colaboradores neste período."
+          data={totalFolhaBreakdown}
+          icon={<DollarSign className="h-6 w-6 text-primary" />}
+        />
+
+        <FinancialBreakdownModal
+          isOpen={activeModal === 'decimo3'}
+          onClose={() => setActiveModal(null)}
+          title="Detalhamento do 13º Salário Projetado"
+          subtitle={`Provisão mensal individual de 1/12 do salário base para ${monthName} de ${year}.`}
+          monthName={monthName}
+          year={year}
+          totalSum={provision13}
+          colorClass="text-amber-600 dark:text-amber-400"
+          emptyMessage="Nenhum salário base para calcular a provisão de 13º."
+          data={decimo3Breakdown}
+          icon={<CalendarDays className="h-6 w-6 text-amber-600 dark:text-amber-400" />}
+        />
+
+        <FinancialBreakdownModal
+          isOpen={activeModal === 'ferias'}
+          onClose={() => setActiveModal(null)}
+          title="Detalhamento de Férias Projetadas"
+          subtitle={`Provisão mensal individual do 1/3 constitucional de férias para ${monthName} de ${year}.`}
+          monthName={monthName}
+          year={year}
+          totalSum={provisionVacation}
+          colorClass="text-sky-600 dark:text-sky-400"
+          emptyMessage="Nenhum salário base para calcular a provisão de férias."
+          data={feriasBreakdown}
+          icon={<Palmtree className="h-6 w-6 text-sky-600 dark:text-sky-400" />}
+        />
 
         {loading ? (
           <div className="flex flex-col items-center justify-center h-64 space-y-4">
