@@ -46,6 +46,12 @@ import {
   FinancialBreakdownModal,
   EmployeeFinancialDetail,
 } from '@/components/folha-pagamento/FinancialBreakdownModal'
+import { ValesModal, ColaboradorFolhaOption } from '@/components/folha-pagamento/ValesModal'
+import {
+  RescisaoModal,
+  ColaboradorRescisaoOption,
+} from '@/components/folha-pagamento/RescisaoModal'
+import { Banknote, Calculator } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -112,6 +118,9 @@ export default function FolhaPagamento() {
   const [activeModal, setActiveModal] = useState<
     'salarios' | 'vt' | 'extras' | 'descontos' | 'total' | 'decimo3' | 'ferias' | null
   >(null)
+  const [valesModalOpen, setValesModalOpen] = useState(false)
+  const [rescisaoModalOpen, setRescisaoModalOpen] = useState(false)
+  const [rawProfiles, setRawProfiles] = useState<any[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { toast } = useToast()
@@ -183,6 +192,8 @@ export default function FolhaPagamento() {
       if (errProfiles || errPontos || errLaunches) {
         throw new Error('Erro ao carregar dados.')
       }
+
+      setRawProfiles(profiles || [])
 
       const hoursByProfile: Record<string, number> = {}
       pontos?.forEach((p) => {
@@ -746,6 +757,24 @@ export default function FolhaPagamento() {
               </Dialog>
             )}
 
+            <Button
+              variant="outline"
+              onClick={() => setValesModalOpen(true)}
+              className="flex items-center gap-1.5"
+            >
+              <Banknote className="w-4 h-4 text-emerald-600" />
+              Lançamento de Vales
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => setRescisaoModalOpen(true)}
+              className="flex items-center gap-1.5"
+            >
+              <Calculator className="w-4 h-4 text-primary" />
+              Simular Rescisão
+            </Button>
+
             {isManagerOrAdmin && (
               <Button
                 variant={isClosed ? 'secondary' : 'default'}
@@ -1135,6 +1164,25 @@ export default function FolhaPagamento() {
           emptyMessage="Nenhum salário base para calcular a provisão de férias."
           data={feriasBreakdown}
           icon={<Palmtree className="h-6 w-6 text-sky-600 dark:text-sky-400" />}
+        />
+
+        {/* Modal de Lançamento de Vales */}
+        <ValesModal
+          isOpen={valesModalOpen}
+          onClose={() => setValesModalOpen(false)}
+          month={Number(month)}
+          year={Number(year)}
+          monthName={monthName}
+          isClosed={isClosed}
+          colaboradores={rawProfiles as ColaboradorFolhaOption[]}
+          onSuccess={fetchData}
+        />
+
+        {/* Modal de Simulação de Rescisão */}
+        <RescisaoModal
+          isOpen={rescisaoModalOpen}
+          onClose={() => setRescisaoModalOpen(false)}
+          colaboradores={rawProfiles as ColaboradorRescisaoOption[]}
         />
 
         {loading ? (

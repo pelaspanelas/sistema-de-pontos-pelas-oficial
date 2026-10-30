@@ -45,6 +45,8 @@ export default function Dashboard() {
   const [pontosForaHorario, setPontosForaHorario] = useState<any[]>([])
   const [bancoHorasUsers, setBancoHorasUsers] = useState<any[]>([])
   const [disablingBancoHorasId, setDisablingBancoHorasId] = useState<string | null>(null)
+  const [confirmDismissAllOpen, setConfirmDismissAllOpen] = useState(false)
+  const [dismissingAll, setDismissingAll] = useState(false)
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth().toString())
   const [selectedStatus, setSelectedStatus] = useState('pendente')
@@ -341,6 +343,31 @@ export default function Dashboard() {
       toast({ title: 'Alerta dispensado' })
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao dispensar alerta', description: err.message })
+    }
+  }
+
+  const handleDismissAllAlerts = async () => {
+    if (pontosForaHorario.length === 0) return
+    setDismissingAll(true)
+    try {
+      const ids = pontosForaHorario.map((p) => p.id)
+      const { error } = await supabase
+        .from('pontos')
+        .update({ alerta_visualizado: true })
+        .in('id', ids)
+
+      if (error) throw error
+      setPontosForaHorario([])
+      setConfirmDismissAllOpen(false)
+      toast({ title: 'Todos os alertas foram marcados como OK' })
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao marcar todos como OK',
+        description: err.message,
+      })
+    } finally {
+      setDismissingAll(false)
     }
   }
 
@@ -693,14 +720,27 @@ export default function Dashboard() {
         </Card>
 
         <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-orange-600">
-              <AlertCircle className="w-5 h-5" />
-              Pontos Fora do Horário
-            </CardTitle>
-            <CardDescription>
-              Registros de entrada antecipada ou saída tardia no mês selecionado
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-orange-600">
+                <AlertCircle className="w-5 h-5" />
+                Pontos Fora do Horário
+              </CardTitle>
+              <CardDescription>
+                Registros de entrada antecipada ou saída tardia no mês selecionado
+              </CardDescription>
+            </div>
+            {pontosForaHorario.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmDismissAllOpen(true)}
+                className="border-orange-300 text-orange-700 hover:bg-orange-100 hover:text-orange-900 flex items-center gap-1.5"
+              >
+                <Check className="h-4 w-4" />
+                OK em todos ({pontosForaHorario.length})
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             {pontosForaHorario.length === 0 ? (
@@ -755,6 +795,39 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={confirmDismissAllOpen} onOpenChange={setConfirmDismissAllOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Marcar todos como OK?</DialogTitle>
+            <DialogDescription>
+              Deseja marcar todos os {pontosForaHorario.length} pontos fora do horário pendentes
+              como visualizados/OK? Esta ação dispensará os alertas exibidos.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDismissAllOpen(false)}
+              disabled={dismissingAll}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleDismissAllAlerts}
+              disabled={dismissingAll}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {dismissingAll ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4 mr-2" />
+              )}
+              Confirmar OK em todos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
