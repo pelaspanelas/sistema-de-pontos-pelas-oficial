@@ -76,6 +76,7 @@ interface PayrollItem {
   cpf: string
   baseSalary: number
   valorVt: number
+  totalVt: number
   totalCredits: number
   totalDebits: number
   totalHours: number
@@ -249,9 +250,13 @@ export default function FolhaPagamento() {
 
           let credits = 0
           let debits = 0
+          let totalVt = 0
           userLaunches.forEach((l) => {
             if (l.categoria === 'credito') credits += l.valor
             if (l.categoria === 'debito') debits += l.valor
+            if (l.categoria === 'credito' && l.tipo.toLowerCase() === 'vt') {
+              totalVt += l.valor
+            }
           })
 
           const calculatedPayment = baseSalary + credits - debits
@@ -263,6 +268,7 @@ export default function FolhaPagamento() {
             cpf: p.cpf || '',
             baseSalary,
             valorVt,
+            totalVt,
             totalCredits: credits,
             totalDebits: debits,
             totalHours,
@@ -1210,6 +1216,7 @@ export default function FolhaPagamento() {
                   </TableHead>
                   <TableHead>Colaborador</TableHead>
                   <TableHead className="text-right hidden sm:table-cell">Salário Base</TableHead>
+                  <TableHead className="text-right hidden md:table-cell">VT</TableHead>
                   <TableHead className="text-right hidden md:table-cell">Créditos</TableHead>
                   <TableHead className="text-right hidden md:table-cell">Débitos</TableHead>
                   <TableHead className="text-right">Valor Líquido</TableHead>
@@ -1246,6 +1253,14 @@ export default function FolhaPagamento() {
                       }
                     >
                       {formatCurrency(item.baseSalary)}
+                    </TableCell>
+                    <TableCell
+                      className="text-right hidden md:table-cell cursor-pointer"
+                      onClick={() =>
+                        navigate(`/folha-pagamento/${item.profileId}?month=${month}&year=${year}`)
+                      }
+                    >
+                      {formatCurrency(item.totalVt)}
                     </TableCell>
                     <TableCell
                       className="text-right hidden md:table-cell text-emerald-600 cursor-pointer"

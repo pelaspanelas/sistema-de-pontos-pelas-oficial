@@ -323,8 +323,7 @@ export default function FolhaPagamentoDetalhes() {
       }
 
       toast({ title: 'Sucesso', description: 'Vale Transporte projetado salvo com sucesso.' })
-      setDailyVt('')
-      fetchData()
+      await fetchData()
     } catch (err) {
       toast({ title: 'Erro', description: 'Falha ao salvar VT.', variant: 'destructive' })
     } finally {
@@ -368,7 +367,7 @@ export default function FolhaPagamentoDetalhes() {
       }
 
       toast({ title: 'Sucesso', description: 'Adiantamento lançado com sucesso.' })
-      fetchData()
+      await fetchData()
     } catch (err) {
       toast({ title: 'Erro', description: 'Falha ao lançar adiantamento.', variant: 'destructive' })
     } finally {
@@ -415,7 +414,7 @@ export default function FolhaPagamentoDetalhes() {
       setIsLaunchModalOpen(false)
       setLaunchForm({ descricao: '', categoria: 'credito', tipo: 'bonus', valor: '' })
       setEditingLaunchId(null)
-      fetchData()
+      await fetchData()
     } catch (err) {
       toast({
         title: 'Erro',
@@ -439,7 +438,7 @@ export default function FolhaPagamentoDetalhes() {
       const { error } = await supabase.from('lancamentos_folha').delete().eq('id', launchId)
       if (error) throw error
       toast({ title: 'Sucesso', description: 'Lançamento removido.' })
-      fetchData()
+      await fetchData()
     } catch (err) {
       toast({ title: 'Erro', description: 'Falha ao remover.', variant: 'destructive' })
     }
