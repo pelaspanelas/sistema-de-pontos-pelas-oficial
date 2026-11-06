@@ -457,8 +457,8 @@ export default function FolhaPagamentoDetalhes() {
       `Competência: ${monthName} de ${year}`,
       '',
       `Salário Base: ${formatCurrency(profile?.base_salary || 0)}`,
+      `Créditos: ${formatCurrency(totalCredits)}`,
       `VT: ${formatCurrency(totalVt)}`,
-      `Extras/Bônus: ${formatCurrency(totalExtras)}`,
       `Descontos: ${formatCurrency(totalDiscountsExclVale)}`,
       '',
       `*Total Líquido: ${formatCurrency(netPay)}*`,
@@ -466,23 +466,27 @@ export default function FolhaPagamentoDetalhes() {
     return encodeURIComponent(lines.join('\n'))
   }
 
+  function getWhatsAppNumber(): string | null {
+    const digits = (profile?.phone || '').replace(/\D/g, '')
+    if (!digits) return null
+    if (digits.startsWith('55')) return digits
+    if (digits.length >= 10 && digits.length <= 11) return `55${digits}`
+    return digits
+  }
+
   async function handleSendWhatsApp() {
     setSendingChannel('whatsapp')
     try {
-      if (!profile?.phone) {
+      const number = getWhatsAppNumber()
+      if (!number) {
         toast({
-          title: 'Erro',
-          description: 'Colaborador não possui telefone cadastrado.',
+          title: 'Telefone não cadastrado',
+          description: `${profile?.name ?? 'O colaborador'} não possui telefone cadastrado. Cadastre-o em Colaboradores para enviar o holerite por WhatsApp.`,
           variant: 'destructive',
         })
         return
       }
-      const digits = profile.phone.replace(/\D/g, '')
-      if (!digits) {
-        toast({ title: 'Erro', description: 'Telefone inválido.', variant: 'destructive' })
-        return
-      }
-      const url = `https://wa.me/55${digits}?text=${buildWhatsAppMessage()}`
+      const url = `https://wa.me/${number}?text=${buildWhatsAppMessage()}`
       window.open(url, '_blank')
       await logPayslipSend('whatsapp')
       toast({ title: 'WhatsApp', description: 'Abrindo conversa no WhatsApp...' })
@@ -491,42 +495,54 @@ export default function FolhaPagamentoDetalhes() {
     }
   }
 
+  async function invokeSendPayslip() {
+    const result = await supabase.functions.invoke('send-payslip', {
+      body: {
+        email: profile!.email,
+        name: profile!.name,
+        month: monthName,
+        year: year,
+        mes: month,
+        ano: year,
+        profileId: profile!.id,
+        launches: launches.map((l) => ({
+          descricao: l.descricao,
+          categoria: l.categoria,
+          valor: Number(l.valor),
+        })),
+        details: {
+          baseSalary: profile!.base_salary || 0,
+          vt: totalVt,
+          extras: totalExtras,
+          discounts: totalDiscountsExclVale,
+          netPay,
+          totalCredits,
+          totalDebits,
+        },
+      },
+    })
+    if (result.error) throw result.error
+  }
+
   async function handleSendEmail() {
     if (!profile?.email) {
       toast({
-        title: 'Erro',
-        description: 'Colaborador não possui email cadastrado.',
+        title: 'E-mail não cadastrado',
+        description: `${profile?.name ?? 'O colaborador'} não possui e-mail cadastrado. Cadastre-o em Colaboradores para enviar o holerite por e-mail.`,
         variant: 'destructive',
       })
       return
     }
     setSendingChannel('email')
     try {
-      const result = await supabase.functions.invoke('send-payslip', {
-        body: {
-          email: profile.email,
-          name: profile.name,
-          month: monthName,
-          year: year,
-          details: {
-            baseSalary: profile.base_salary || 0,
-            vt: totalVt,
-            extras: totalExtras,
-            discounts: totalDiscountsExclVale,
-            netPay,
-            totalCredits,
-            totalDebits,
-          },
-        },
-      })
-      if (result.error) throw result.error
+      await invokeSendPayslip()
       await logPayslipSend('email')
-      toast({ title: 'Sucesso', description: 'Holerite enviado por email!' })
+      toast({ title: 'Sucesso', description: 'Holerite enviado por e-mail com sucesso!' })
     } catch (err: any) {
-      const msg =
-        err && typeof err.message === 'string' && err.message.includes('is not valid JSON')
-          ? 'Serviço de email indisponível. Tente novamente em instantes.'
-          : 'Falha ao enviar email.'
+      const raw = err && typeof err.message === 'string' ? err.message : ''
+      const msg = raw.includes('is not valid JSON')
+        ? 'Serviço de e-mail indisponível. Tente novamente em instantes.'
+        : raw || 'Falha ao enviar e-mail.'
       toast({ title: 'Erro', description: msg, variant: 'destructive' })
     } finally {
       setSendingChannel(null)
@@ -534,15 +550,56 @@ export default function FolhaPagamentoDetalhes() {
   }
 
   async function handleSendBoth() {
+    const hasEmail = Boolean(profile?.email)
+    const hasPhone = Boolean(getWhatsAppNumber())
+    if (!hasEmail && !hasPhone) {
+      toast({
+        title: 'Contatos não cadastrados',
+        description: `${profile?.name ?? 'O colaborador'} não possui e-mail nem telefone cadastrado. Complete o cadastro em Colaboradores.`,
+        variant: 'destructive',
+      })
+      return
+    }
     setSendingChannel('ambos')
     try {
-      await handleSendEmail()
-      if (profile?.phone) {
-        await handleSendWhatsApp()
-      } else {
+      let emailOk = false
+      if (hasEmail) {
+        try {
+          await invokeSendPayslip()
+          await logPayslipSend('ambos')
+          emailOk = true
+        } catch (err: any) {
+          const raw = err && typeof err.message === 'string' ? err.message : ''
+          toast({
+            title: 'Erro no e-mail',
+            description: raw.includes('is not valid JSON')
+              ? 'Serviço de e-mail indisponível. Tente novamente em instantes.'
+              : raw || 'Falha ao enviar e-mail.',
+            variant: 'destructive',
+          })
+        }
+      }
+      if (hasPhone) {
+        const number = getWhatsAppNumber()!
+        const url = `https://wa.me/${number}?text=${buildWhatsAppMessage()}`
+        window.open(url, '_blank')
+      }
+      if (emailOk && hasPhone) {
         toast({
-          title: 'Aviso',
-          description: 'Email enviado. Telefone não cadastrado para WhatsApp.',
+          title: 'Sucesso',
+          description: 'Holerite enviado por e-mail e WhatsApp aberto para envio!',
+        })
+      } else if (emailOk) {
+        toast({
+          title: 'Parcial',
+          description: 'E-mail enviado, mas o colaborador não possui telefone cadastrado.',
+          variant: 'destructive',
+        })
+      } else if (hasPhone) {
+        toast({
+          title: 'Parcial',
+          description: 'WhatsApp aberto, mas o envio do e-mail falhou.',
+          variant: 'destructive',
         })
       }
     } finally {

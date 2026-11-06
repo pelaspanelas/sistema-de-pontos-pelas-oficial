@@ -1,3 +1,5 @@
 {
-  "imports": {}
+  "imports": {
+    "@aws-sdk/client-sesv2": "npm:@aws-sdk/client-sesv2@3"
+  }
 }

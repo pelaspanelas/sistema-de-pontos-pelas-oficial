@@ -1,6 +1,13 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2'
+import { SESv2Client, SendEmailCommand } from 'npm:@aws-sdk/client-sesv2@3'
 import { corsHeaders } from '../_shared/cors.ts'
+
+interface PayslipLaunch {
+  descricao: string
+  categoria: 'credito' | 'debito'
+  valor: number
+}
 
 interface PayslipDetails {
   baseSalary: number
@@ -21,18 +28,51 @@ interface SendPayslipPayload {
   mes?: number
   ano?: number
   canal?: 'email' | 'whatsapp' | 'ambos'
+  launches?: PayslipLaunch[]
   details: PayslipDetails
 }
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-const resendApiKey = Deno.env.get('RESEND_API_KEY') ?? ''
 
 function formatCurrency(val: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   }).format(val || 0)
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function buildLaunchRowsHtml(launches: PayslipLaunch[]): string {
+  if (!launches || launches.length === 0) return ''
+  return launches
+    .map(
+      (l) => `
+        <tr>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #f3f4f6; font-size: 13px;">${escapeHtml(l.descricao)}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #f3f4f6; font-size: 13px; text-align: right; color: ${l.categoria === 'credito' ? '#059669' : '#dc2626'};">
+            ${l.categoria === 'credito' ? '+' : '-'}${formatCurrency(l.valor)}
+          </td>
+        </tr>`,
+    )
+    .join('')
+}
+
+function buildLaunchRowsText(launches: PayslipLaunch[]): string {
+  if (!launches || launches.length === 0) return ''
+  return launches
+    .map(
+      (l) =>
+        `  - ${l.descricao}: ${l.categoria === 'credito' ? '+' : '-'}${formatCurrency(l.valor)}`,
+    )
+    .join('\n')
 }
 
 function buildEmailHtml(payload: SendPayslipPayload): string {
@@ -44,7 +84,7 @@ function buildEmailHtml(payload: SendPayslipPayload): string {
         <p style="margin: 4px 0 0; font-size: 14px; opacity: 0.9;">Competência: ${payload.month}/${payload.year}</p>
       </div>
       <div style="border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px; padding: 24px;">
-        <p style="margin: 0 0 16px; font-size: 15px;">Olá <strong>${payload.name}</strong>,</p>
+        <p style="margin: 0 0 16px; font-size: 15px;">Olá <strong>${escapeHtml(payload.name)}</strong>,</p>
         <p style="margin: 0 0 16px; font-size: 14px; color: #6b7280;">
           Segue o resumo do seu holerite referente a <strong>${payload.month}/${payload.year}</strong>:
         </p>
@@ -70,6 +110,15 @@ function buildEmailHtml(payload: SendPayslipPayload): string {
             <td style="padding: 14px 10px; font-weight: bold; text-align: right; color: #1e40af; font-size: 16px;">${formatCurrency(d.netPay)}</td>
           </tr>
         </table>
+        ${
+          payload.launches && payload.launches.length > 0
+            ? `
+        <p style="margin: 24px 0 8px; font-size: 14px; font-weight: bold;">Lançamentos do período:</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 8px 0 16px;">
+          ${buildLaunchRowsHtml(payload.launches)}
+        </table>`
+            : ''
+        }
         <p style="color: #9ca3af; font-size: 12px; margin-top: 24px;">
           Este é um e-mail automático, não responda. Em caso de dúvidas, entre em contato com o departamento de RH.
         </p>
@@ -78,41 +127,78 @@ function buildEmailHtml(payload: SendPayslipPayload): string {
   `
 }
 
-async function sendEmailViaResend(
+function buildEmailText(payload: SendPayslipPayload): string {
+  const d = payload.details
+  const lines = [
+    'HOLERITE - PELAS PANELAS',
+    `Competência: ${payload.month}/${payload.year}`,
+    '',
+    `Olá ${payload.name},`,
+    '',
+    `Salário Base: ${formatCurrency(d.baseSalary)}`,
+    `Vale Transporte: ${formatCurrency(d.vt)}`,
+    `Extras / Bônus: ${formatCurrency(d.extras)}`,
+    `Descontos: -${formatCurrency(d.discounts)}`,
+    '',
+    `TOTAL LÍQUIDO: ${formatCurrency(d.netPay)}`,
+  ]
+  if (payload.launches && payload.launches.length > 0) {
+    lines.push('', 'Lançamentos do período:')
+    lines.push(buildLaunchRowsText(payload.launches))
+  }
+  lines.push('', 'Este é um e-mail automático, não responda.')
+  return lines.join('\n')
+}
+
+function getSesClient(): SESv2Client | null {
+  const accessKey = Deno.env.get('AWS_ACCESS_KEY_ID') ?? ''
+  const secretKey = Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? ''
+  const region = Deno.env.get('AWS_REGION') ?? ''
+  if (!accessKey || !secretKey || !region) return null
+  return new SESv2Client({
+    region,
+    credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
+  })
+}
+
+async function sendEmailViaSes(
   to: string,
   subject: string,
   html: string,
+  text: string,
 ): Promise<{ success: boolean; error?: string }> {
-  if (!resendApiKey) {
-    return { success: false, error: 'RESEND_API_KEY não configurado' }
-  }
-
-  try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: 'Pelas Panelas <noreply@pelaspanelas.com.br>',
-        to,
-        subject,
-        html,
-      }),
-    })
-
-    if (response.ok) {
-      return { success: true }
-    }
-
-    const errBody = await response.text()
-    return { success: false, error: `Resend API ${response.status}: ${errBody}` }
-  } catch (err) {
+  const client = getSesClient()
+  if (!client) {
     return {
       success: false,
-      error: err instanceof Error ? err.message : 'Erro ao enviar email',
+      error:
+        'Serviço de e-mail não configurado no servidor (credenciais AWS ausentes). Contate o administrador.',
     }
+  }
+
+  const from = Deno.env.get('PAYSLIP_FROM_EMAIL') || 'noreply@pelaspanelas.com.br'
+
+  try {
+    await client.send(
+      new SendEmailCommand({
+        FromEmailAddress: from,
+        Destination: { ToAddresses: [to] },
+        Content: {
+          Simple: {
+            Subject: { Data: subject, Charset: 'utf-8' },
+            Body: {
+              Html: { Data: html, Charset: 'utf-8' },
+              Text: { Data: text, Charset: 'utf-8' },
+            },
+          },
+        },
+      }),
+    )
+    return { success: true }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Erro ao enviar e-mail'
+    console.error('SES send error:', message)
+    return { success: false, error: `Falha no envio do e-mail: ${message}` }
   }
 }
 
@@ -170,37 +256,24 @@ Deno.serve(async (req: Request) => {
     const canal = payload.canal || 'email'
     const profileId = payload.profileId || user.id
 
-    const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false },
-    })
+    const emailHtml = buildEmailHtml(payload)
+    const emailText = buildEmailText(payload)
+    const subject = `Holerite - ${payload.month}/${payload.year}`
+    const emailResult = await sendEmailViaSes(payload.email, subject, emailHtml, emailText)
 
-    const { data: existing } = await serviceClient
-      .from('payslip_envios')
-      .select('id, created_at')
-      .eq('profile_id', profileId)
-      .eq('mes', mes)
-      .eq('ano', ano)
-      .eq('canal', canal)
-      .order('created_at', { ascending: false })
-      .limit(1)
-
-    if (existing && existing.length > 0) {
+    if (!emailResult.success) {
       return new Response(
-        JSON.stringify({
-          sucesso: true,
-          idempotent: true,
-          message: 'Holerite já enviado anteriormente para este período e canal.',
-        }),
+        JSON.stringify({ sucesso: false, error: emailResult.error || 'Falha ao enviar e-mail' }),
         {
-          status: 200,
+          status: 500,
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
         },
       )
     }
 
-    const emailHtml = buildEmailHtml(payload)
-    const subject = `Holerite - ${payload.month}/${payload.year}`
-    const emailResult = await sendEmailViaResend(payload.email, subject, emailHtml)
+    const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false },
+    })
 
     await serviceClient.from('payslip_envios').insert({
       profile_id: profileId,
@@ -210,26 +283,11 @@ Deno.serve(async (req: Request) => {
       enviado_por: user.id,
     })
 
-    if (!emailResult.success && resendApiKey) {
-      return new Response(
-        JSON.stringify({
-          sucesso: false,
-          error: emailResult.error || 'Falha ao enviar email',
-        }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
-        },
-      )
-    }
-
     return new Response(
       JSON.stringify({
         sucesso: true,
-        emailSent: emailResult.success,
-        message: emailResult.success
-          ? 'Holerite enviado por email com sucesso!'
-          : 'Envio registrado. Provider de email não configurado.',
+        emailSent: true,
+        message: 'Holerite enviado por e-mail com sucesso!',
       }),
       {
         status: 200,
